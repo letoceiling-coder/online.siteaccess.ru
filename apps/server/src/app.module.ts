@@ -30,13 +30,6 @@ import { ProjectsModule } from './projects/projects.module';
         index: 'index.html',
       },
     }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'portal', 'dist'),
-      serveRoot: '/',
-      serveStaticOptions: {
-        index: 'index.html',
-      },
-    }),
     PrismaModule,
     ChannelsModule,
     WidgetModule,
