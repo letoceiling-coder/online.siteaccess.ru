@@ -83,9 +83,9 @@ export class WidgetService {
     const visitorSessionToken = this.jwtService.sign(payload);
 
     return {
+      externalId: visitor.externalId,
       conversationId: conversation.id,
       visitorSessionToken,
-      externalId: visitor.externalId,
     };
   }
 }
