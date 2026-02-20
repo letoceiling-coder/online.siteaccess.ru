@@ -3,9 +3,13 @@ import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Global exception filter for logging all errors
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Body size limit (1MB)
   app.use(require('express').json({ limit: '1mb' }));
@@ -67,7 +71,11 @@ async function bootstrap() {
     }
     
     // Serve portal index.html for SPA routes
-    res.sendFile(join(portalDistPath, 'index.html'));
+    res.sendFile(join(portalDistPath, 'index.html'), (err: any) => {
+      if (err) {
+        next(err);
+      }
+    });
   });
 
   const port = process.env.PORT || 3000;
