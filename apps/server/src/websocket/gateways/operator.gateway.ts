@@ -9,13 +9,13 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger, UseGuards, UsePipes, ValidationPipe, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import Redis from 'ioredis';
-import { WidgetAuthGuard } from '../middleware/widget-auth.middleware';
+import { OperatorAuthGuard } from '../middleware/widget-auth.middleware';
 
 @WebSocketGateway({
   namespace: '/widget',
   cors: { origin: true, credentials: true },
 })
-@UseGuards(WidgetAuthGuard)
+@UseGuards(OperatorAuthGuard)
 @UsePipes(new ValidationPipe())
 @Injectable()
 export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -30,14 +30,15 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     @Inject('REDIS_CLIENT') private redis: Redis,
   ) {}
 
-    const { channelId } = client.data;
+  async handleConnection(client: Socket) {
     const { channelId, conversationId } = client.data;
+    client.join(`channel:${channelId}`);
     client.join(`conversation:${conversationId}`);
     this.logger.log(`Operator connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
   }
 
   async handleDisconnect(client: Socket) {
-    this.logger.log(`Widget disconnected: ${client.id}`);
+    this.logger.log(`Operator disconnected: ${client.id}`);
   }
 
   @SubscribeMessage('message:send')
