@@ -1,7 +1,9 @@
 import { io, Socket } from 'socket.io-client';
 
-const API_URL = 'http://127.0.0.1:3100';
-const WS_URL = 'http://127.0.0.1:3100';
+interface ChatConfig {
+  token: string;
+  apiBase?: string;
+}
 
 interface ChatMessage {
   serverMessageId?: string;
@@ -13,7 +15,7 @@ interface ChatMessage {
 }
 
 class SiteAccessChatWidget {
-  private token: string | null = null;
+  private config: ChatConfig | null = null;
   private externalId: string | null = null;
   private socket: Socket | null = null;
   private conversationId: string | null = null;
@@ -21,6 +23,7 @@ class SiteAccessChatWidget {
   private messages: ChatMessage[] = [];
   private isOpen = false;
   private presenceInterval: NodeJS.Timeout | null = null;
+  private apiBase: string = 'https://online.siteaccess.ru';
 
   private container: HTMLElement | null = null;
   private button: HTMLElement | null = null;
@@ -33,15 +36,16 @@ class SiteAccessChatWidget {
   }
 
   private init() {
-    // РџРѕР»СѓС‡РёС‚СЊ token РёР· window.SiteAccessChat
     const config = (window as any).SiteAccessChat;
     if (!config || !config.token) {
       console.error('SiteAccessChat: token not found');
       return;
     }
-    this.token = config.token;
 
-    // РџРѕР»СѓС‡РёС‚СЊ РёР»Рё СЃРѕР·РґР°С‚СЊ externalId
+    this.config = config;
+    this.apiBase = config.apiBase || 'https://online.siteaccess.ru';
+
+    // Get or create externalId
     this.externalId = localStorage.getItem('sa_external_id');
     if (!this.externalId) {
       this.externalId = this.generateUUID();
@@ -49,6 +53,7 @@ class SiteAccessChatWidget {
     }
 
     this.createUI();
+    this.setupEventListeners();
   }
 
   private generateUUID(): string {
@@ -60,7 +65,7 @@ class SiteAccessChatWidget {
   }
 
   private createUI() {
-    // Shadow DOM container
+    // Create shadow DOM container
     const shadowHost = document.createElement('div');
     shadowHost.id = 'siteaccess-chat-widget';
     document.body.appendChild(shadowHost);
@@ -69,7 +74,7 @@ class SiteAccessChatWidget {
 
     // Styles
     const style = document.createElement('style');
-    style.textContent = \
+    style.textContent = `
       .chat-button {
         position: fixed;
         bottom: 20px;
@@ -82,7 +87,7 @@ class SiteAccessChatWidget {
         border: none;
         cursor: pointer;
         font-size: 24px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         z-index: 10000;
       }
       .chat-panel {
@@ -93,10 +98,10 @@ class SiteAccessChatWidget {
         height: 500px;
         background: white;
         border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         display: none;
         flex-direction: column;
-        z-index: 10001;
+        z-index: 10000;
       }
       .chat-panel.open {
         display: flex;
@@ -106,7 +111,6 @@ class SiteAccessChatWidget {
         background: #007bff;
         color: white;
         border-radius: 8px 8px 0 0;
-        font-weight: bold;
       }
       .chat-messages {
         flex: 1;
@@ -115,13 +119,11 @@ class SiteAccessChatWidget {
       }
       .message {
         margin-bottom: 10px;
-        padding: 8px 12px;
-        border-radius: 8px;
-        max-width: 80%;
+        padding: 8px;
+        border-radius: 4px;
       }
       .message.visitor {
         background: #e3f2fd;
-        margin-left: auto;
         text-align: right;
       }
       .message.operator {
@@ -147,15 +149,13 @@ class SiteAccessChatWidget {
         border-radius: 4px;
         cursor: pointer;
       }
-    \;
-
+    `;
     shadow.appendChild(style);
 
     // Button
     this.button = document.createElement('button');
     this.button.className = 'chat-button';
-    this.button.textContent = 'рџ’¬';
-    this.button.onclick = () => this.togglePanel();
+    this.button.textContent = '💬';
     shadow.appendChild(this.button);
 
     // Panel
@@ -180,76 +180,84 @@ class SiteAccessChatWidget {
     this.input.className = 'chat-input';
     this.input.type = 'text';
     this.input.placeholder = 'Type a message...';
-    this.input.onkeypress = (e) => {
-      if (e.key === 'Enter') {
-        this.sendMessage();
-      }
-    };
     inputContainer.appendChild(this.input);
 
     const sendButton = document.createElement('button');
     sendButton.className = 'chat-send';
     sendButton.textContent = 'Send';
-    sendButton.onclick = () => this.sendMessage();
     inputContainer.appendChild(sendButton);
+
+    sendButton.addEventListener('click', () => this.sendMessage());
+    this.input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.sendMessage();
+      }
+    });
 
     this.container = shadowHost;
   }
 
+  private setupEventListeners() {
+    if (this.button) {
+      this.button.addEventListener('click', () => {
+        this.togglePanel();
+      });
+    }
+  }
+
   private async togglePanel() {
+    if (!this.isOpen) {
+      await this.connect();
+    }
     this.isOpen = !this.isOpen;
     if (this.panel) {
       this.panel.classList.toggle('open', this.isOpen);
     }
-
-    if (this.isOpen && !this.socket) {
-      await this.connect();
-    }
   }
 
   private async connect() {
+    if (!this.config || !this.externalId) return;
+
     try {
-      // РџРѕР»СѓС‡РёС‚СЊ session
-      const response = await fetch(\\/api/widget/session\, {
+      // Get session
+      const response = await fetch(`${this.apiBase}/api/widget/session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Origin': window.location.origin,
         },
         body: JSON.stringify({
-          token: this.token,
+          token: this.config.token,
           externalId: this.externalId,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(\Session failed: \\);
+        throw new Error('Failed to create session');
       }
 
       const data = await response.json();
       this.conversationId = data.conversationId;
       this.visitorSessionToken = data.visitorSessionToken;
-      this.externalId = data.externalId;
 
-      // РџРѕРґРєР»СЋС‡РёС‚СЊ Socket.IO
-      this.socket = io(\\/widget\, {
+      // Connect WebSocket
+      this.socket = io(`${this.apiBase}/widget`, {
         auth: { token: this.visitorSessionToken },
         transports: ['websocket'],
       });
 
       this.socket.on('connect', () => {
         console.log('Widget connected');
-        this.requestSync();
-        this.startPresence();
+        this.startPresenceHeartbeat();
+        this.syncMessages();
       });
 
       this.socket.on('message:ack', (data: any) => {
         const msg = this.messages.find((m) => m.clientMessageId === data.clientMessageId);
         if (msg) {
-          msg.serverMessageId = data.serverMessageId;
           msg.delivered = true;
-          this.renderMessages();
+          msg.serverMessageId = data.serverMessageId;
         }
+        this.renderMessages();
       });
 
       this.socket.on('message:new', (data: any) => {
@@ -258,19 +266,12 @@ class SiteAccessChatWidget {
           text: data.text,
           senderType: data.senderType,
           createdAt: data.createdAt,
-          delivered: true,
         });
         this.renderMessages();
       });
 
       this.socket.on('sync:response', (data: any) => {
-        this.messages = data.messages.map((m: any) => ({
-          serverMessageId: m.serverMessageId,
-          text: m.text,
-          senderType: m.senderType,
-          createdAt: m.createdAt,
-          delivered: true,
-        }));
+        this.messages = data.messages || [];
         this.renderMessages();
       });
     } catch (error) {
@@ -278,24 +279,23 @@ class SiteAccessChatWidget {
     }
   }
 
-  private requestSync() {
-    if (this.socket && this.conversationId) {
-      this.socket.emit('sync:request', {
-        conversationId: this.conversationId,
-        limit: 50,
-      });
-    }
-  }
-
-  private startPresence() {
+  private startPresenceHeartbeat() {
     if (this.presenceInterval) {
       clearInterval(this.presenceInterval);
     }
     this.presenceInterval = setInterval(() => {
-      if (this.socket) {
+      if (this.socket && this.socket.connected) {
         this.socket.emit('presence:heartbeat');
       }
     }, 10000);
+  }
+
+  private async syncMessages() {
+    if (!this.socket || !this.conversationId) return;
+    this.socket.emit('sync:request', {
+      conversationId: this.conversationId,
+      limit: 50,
+    });
   }
 
   private sendMessage() {
@@ -305,15 +305,13 @@ class SiteAccessChatWidget {
     if (!text) return;
 
     const clientMessageId = this.generateUUID();
-    const message: ChatMessage = {
+    this.messages.push({
       clientMessageId,
       text,
       senderType: 'visitor',
       createdAt: new Date().toISOString(),
       delivered: false,
-    };
-
-    this.messages.push(message);
+    });
     this.renderMessages();
     this.input.value = '';
 
@@ -329,23 +327,28 @@ class SiteAccessChatWidget {
 
     this.messagesContainer.innerHTML = '';
     this.messages.forEach((msg) => {
-      const div = document.createElement('div');
-      div.className = \message \\;
-      div.textContent = msg.text;
-      this.messagesContainer!.appendChild(div);
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${msg.senderType}`;
+      messageDiv.textContent = msg.text || '';
+      this.messagesContainer!.appendChild(messageDiv);
     });
-
     this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
   }
 }
 
-// Auto-init
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+// Auto-initialize
+if (typeof window !== 'undefined') {
+  (window as any).SiteAccessChatWidget = SiteAccessChatWidget;
+  // Auto-init if config is already available
+  if ((window as any).SiteAccessChat) {
     new SiteAccessChatWidget();
-  });
-} else {
-  new SiteAccessChatWidget();
+  } else {
+    // Wait for config
+    const checkInterval = setInterval(() => {
+      if ((window as any).SiteAccessChat) {
+        clearInterval(checkInterval);
+        new SiteAccessChatWidget();
+      }
+    }, 100);
+  }
 }
-
-export default SiteAccessChatWidget;

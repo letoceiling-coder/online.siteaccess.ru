@@ -5,15 +5,16 @@ export default defineConfig({
     lib: {
       entry: 'src/index.ts',
       name: 'SiteAccessChat',
-      fileName: (format) => siteaccess-chat..js,
-      formats: ['umd', 'es'],
+      fileName: () => 'widget.min.js',
+      formats: ['iife'],
     },
     rollupOptions: {
-      external: [],
       output: {
-        globals: {},
+        extend: true,
       },
     },
+    outDir: 'dist',
+    emptyOutDir: true,
   },
   server: {
     port: 5174,
