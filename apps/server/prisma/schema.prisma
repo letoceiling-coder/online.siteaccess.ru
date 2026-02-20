@@ -123,10 +123,10 @@ model Attachment {
 
 model ChannelMember {
   id        String   @id @default(cuid())
-  channelId String
-  userId    String
+  channelId String   @map("channelid")
+  userId    String   @map("userid")
   role      String   // 'owner' | 'operator' (MVP)
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("createdat")
 
   channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
