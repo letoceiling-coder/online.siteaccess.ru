@@ -30,7 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : 'Internal server error';
 
     // Log full error details (never log passwords/tokens)
-    const errorDetails: any = {
+    const errorDetails = {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
@@ -46,11 +46,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (safeBody.password) safeBody.password = '***';
       if (safeBody.token) safeBody.token = '***';
       if (safeBody.accessToken) safeBody.accessToken = '***';
-      errorDetails.body = safeBody;
+      errorDetails['body'] = safeBody;
     }
 
     this.logger.error(
-      \Exception: \ \ -> \\,
+      `Exception: ${errorDetails.method} ${errorDetails.path} -> ${errorDetails.statusCode}`,
       JSON.stringify(errorDetails, null, 2),
     );
 
