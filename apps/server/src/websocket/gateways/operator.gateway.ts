@@ -18,29 +18,8 @@ import { OperatorAuthGuard } from '../middleware/operator-auth.middleware';
   cors: { origin: true, credentials: true },
 })
 @UseGuards(OperatorAuthGuard)
-@Injectable()
-export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer()
-  server: Server;
-
-  private readonly logger = new Logger(OperatorGateway.name);
-
-  constructor(
-    private prisma: PrismaService,
-    @Inject('REDIS_CLIENT') private redis: Redis,
-  ) {}
-
-  async handleConnection(client: Socket) {
-    const { channelId } = client.data;
-    const channelRoom = \channel:\\;
-    client.join(channelRoom);
-    this.logger.log(\Operator connected: \, channel: \\);
   }
 
-  async handleDisconnect(client: Socket) {
-    this.logger.log(\Operator disconnected: \\);
-  }
-  }
 
   @SubscribeMessage('message:send')
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
@@ -99,4 +78,3 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       createdAt: message.createdAt.toISOString(),
     });
   }
-}
