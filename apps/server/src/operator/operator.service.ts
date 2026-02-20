@@ -77,7 +77,7 @@ export class OperatorService {
     }
 
     // Check membership
-    const membership = await this.prisma.channelMember.findUnique({
+    const membership = await (this.prisma as any).channelMember.findUnique({
       where: {
         channelId_userId: {
           channelId,

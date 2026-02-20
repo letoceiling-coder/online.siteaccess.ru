@@ -19,7 +19,7 @@ export class OperatorJwtStrategy extends PassportStrategy(Strategy, 'operator-jw
 
   async validate(payload: any) {
     // Verify membership still exists
-    const membership = await this.prisma.channelMember.findUnique({
+    const membership = await (this.prisma as any).channelMember.findUnique({
       where: {
         channelId_userId: {
           channelId: payload.channelId,

@@ -41,7 +41,7 @@ export class OperatorAuthGuard implements CanActivate {
       });
 
       // Verify membership
-      const membership = await this.prisma.channelMember.findUnique({
+      const membership = await (this.prisma as any).channelMember.findUnique({
         where: {
           channelId_userId: {
             channelId: payload.channelId,
