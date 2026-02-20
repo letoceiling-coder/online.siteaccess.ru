@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { WidgetSessionDto } from './dto/widget-session.dto';
+import { WidgetPingDto } from './dto/widget-ping.dto';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -87,5 +88,49 @@ export class WidgetService {
       conversationId: conversation.id,
       visitorSessionToken,
     };
+  }
+
+  async ping(dto: WidgetPingDto, origin?: string, userAgent?: string) {
+    const tokenHash = crypto.createHash('sha256').update(dto.token).digest('hex');
+    
+    const channel = await this.prisma.channel.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!channel) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    // Проверка Origin
+    const originHost = origin ? new URL(origin).hostname : null;
+    const allowedDomains = channel.allowedDomains as string[] | null;
+    
+    if (allowedDomains && allowedDomains.length > 0) {
+      if (!originHost || !allowedDomains.includes(originHost)) {
+        throw new UnauthorizedException('Origin not allowed');
+      }
+    } else {
+      // Dev mode: разрешить все, но предупредить
+      this.logger.warn(`Channel ${channel.id} has no allowedDomains - allowing all origins (dev mode)`);
+    }
+
+    // Обновить channel
+    const updateData: any = {
+      lastWidgetPingAt: new Date(),
+      lastWidgetPingUrl: dto.pageUrl,
+      lastWidgetPingUserAgent: userAgent || null,
+    };
+
+    // Установить installVerifiedAt только если еще не установлен
+    if (!channel.installVerifiedAt) {
+      updateData.installVerifiedAt = new Date();
+    }
+
+    await this.prisma.channel.update({
+      where: { id: channel.id },
+      data: updateData,
+    });
+
+    return { ok: true };
   }
 }
