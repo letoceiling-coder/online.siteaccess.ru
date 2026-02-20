@@ -29,15 +29,15 @@ model User {
 model Channel {
   id                String   @id @default(uuid())
   name              String
-  tokenHash         String   @unique
-  allowedDomains    Json?    // ["site.ru", "www.site.ru"]
-  widgetSettings    Json?    // { position: "right", color: "#007bff", greeting: "..." }
-  encryptionMode    EncryptionMode @default(server)
-  ownerUserId       String?  // nullable сначала
-  installVerifiedAt DateTime?
-  lastWidgetPingAt  DateTime?
-  lastWidgetPingUrl String?
-  lastWidgetPingUserAgent String?
+  tokenHash         String   @unique @map("tokenhash")
+  allowedDomains    Json?    @map("alloweddomains") // ["site.ru", "www.site.ru"]
+  widgetSettings    Json?    @map("widgetsettings") // { position: "right", color: "#007bff", greeting: "..." }
+  encryptionMode    EncryptionMode @default(server) @map("encryptionmode")
+  ownerUserId       String?  @map("owneruserid") // nullable сначала
+  installVerifiedAt DateTime? @map("installverifiedat")
+  lastWidgetPingAt  DateTime? @map("lastwidgetpingat")
+  lastWidgetPingUrl String? @map("lastwidgetpingurl")
+  lastWidgetPingUserAgent String? @map("lastwidgetpinguseragent")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
