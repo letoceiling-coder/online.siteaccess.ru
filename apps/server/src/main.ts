@@ -18,8 +18,9 @@ async function bootstrap() {
 
   // SPA fallback for portal (after all routes)
   // This must be after all other routes are registered
-  // __dirname is dist/, so we need to go up to apps/server, then to apps/portal
-  const portalDistPath = join(__dirname, '..', '..', '..', 'portal', 'dist');
+  // __dirname in compiled code is dist/, so:
+  // dist/ -> ../ -> apps/server/ -> ../ -> apps/ -> portal/dist
+  const portalDistPath = join(__dirname, '..', '..', 'portal', 'dist');
   
   // Serve static assets from portal
   app.useStaticAssets(portalDistPath, {
