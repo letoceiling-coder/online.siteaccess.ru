@@ -18,14 +18,14 @@ export class ProjectsService {
       const token = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-      // Create channel (without encryptionMode if it doesn't exist in DB)
+      // Create channel
       const channel = await this.prisma.channel.create({
         data: {
           name: dto.name,
           tokenHash,
           allowedDomains: dto.domains || [],
           ownerUserId: userId,
-          // Do not include encryptionMode if column doesn't exist
+          // encryptionMode will use default from schema (server)
         },
       });
 
