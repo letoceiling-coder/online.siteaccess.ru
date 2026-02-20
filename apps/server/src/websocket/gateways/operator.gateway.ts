@@ -40,6 +40,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleDisconnect(client: Socket) {
     this.logger.log(\Operator disconnected: \\);
   }
+  }
 
   @SubscribeMessage('message:send')
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
