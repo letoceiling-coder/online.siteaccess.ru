@@ -31,7 +31,7 @@ export class ProjectsService {
 
       // Create ChannelMember for owner
       try {
-        await this.prisma.channelMember.upsert({
+        await (this.prisma as any).channelMember.upsert({
           where: {
             channelId_userId: {
               channelId: channel.id,
@@ -201,7 +201,7 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    const members = await this.prisma.channelMember.findMany({
+    const members = await (this.prisma as any).channelMember.findMany({
       where: { channelId: id },
       include: {
         user: {
@@ -257,7 +257,7 @@ export class ProjectsService {
     }
 
     // Check if already a member
-    const existing = await this.prisma.channelMember.findUnique({
+    const existing = await (this.prisma as any).channelMember.findUnique({
       where: {
         channelId_userId: {
           channelId: id,
@@ -275,7 +275,7 @@ export class ProjectsService {
     }
 
     // Add as operator
-    await this.prisma.channelMember.create({
+    await (this.prisma as any).channelMember.create({
       data: {
         channelId: id,
         userId: user.id,
@@ -303,7 +303,7 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    await this.prisma.channelMember.delete({
+    await (this.prisma as any).channelMember.delete({
       where: {
         channelId_userId: {
           channelId: id,
