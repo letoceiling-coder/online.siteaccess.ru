@@ -32,12 +32,12 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   async handleConnection(client: Socket) {
     const { channelId } = client.data;
-    client.join(channel:);
-    this.logger.log(Operator connected: , channel: );
+    client.join(\channel:\\);
+    this.logger.log(\Operator connected: \, channel: \\);
   }
 
   async handleDisconnect(client: Socket) {
-    this.logger.log(Operator disconnected: );
+    this.logger.log(\Operator disconnected: \\);
   }
 
   @SubscribeMessage('message:send')
@@ -89,7 +89,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     });
 
     // РћС‚РїСЂР°РІРєР° РІРёРґР¶РµС‚Сѓ (РІСЃРµРј sockets conversation)
-    this.server.to(nversation:\).emit('message:new', {
+    this.server.to(\conversation:\\).emit('message:new', {
       serverMessageId: message.id,
       conversationId,
       text: message.text,
