@@ -35,6 +35,7 @@ export class ProjectsService {
         id: true,
         name: true,
         allowedDomains: true,
+        ownerUserId: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
