@@ -85,7 +85,8 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     client.emit('message:ack', {
       clientMessageId,
       serverMessageId: message.id,
-    this.server.to(nversation:\).emit(" message:new, {
+    // РћС‚РїСЂР°РІРєР° РІРёРґР¶РµС‚Сѓ (РІСЃРµРј sockets conversation)
+    this.server.to(\conversation:\\).emit(" message:new\, {
     });
 
     // РћС‚РїСЂР°РІРєР° РІРёРґР¶РµС‚Сѓ (РІСЃРµРј sockets conversation)
