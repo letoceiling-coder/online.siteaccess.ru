@@ -31,17 +31,3 @@ export class AuthController {
     };
   }
 }
-
-// Alias controller for /api/me (backward compatibility)
-@Controller('api')
-export class MeController {
-  @Get('me')
-  @UseGuards(AuthGuard('jwt'))
-  async getMe(@Request() req: any) {
-    return {
-      id: req.user.id,
-      email: req.user.email,
-      createdAt: req.user.createdAt,
-    };
-  }
-}
