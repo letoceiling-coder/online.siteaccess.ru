@@ -21,6 +21,13 @@ import { WebsocketModule } from './websocket/websocket.module';
       rootPath: join(__dirname, '..', '..', 'widget', 'demo'),
       serveRoot: '/demo',
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'operator-web', 'dist'),
+      serveRoot: '/operator',
+      serveStaticOptions: {
+        index: 'index.html',
+      },
+    }),
     PrismaModule,
     ChannelsModule,
     WidgetModule,
