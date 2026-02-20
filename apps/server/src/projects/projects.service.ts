@@ -1,33 +1,86 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger, ConflictException, HttpException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateDomainsDto } from './dto/update-domains.dto';
 import { AddOperatorDto } from '../operator/dto/add-operator.dto';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateProjectDto, userId: string) {
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    try {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const channel = await this.prisma.channel.create({
-      data: {
-        name: dto.name,
-        tokenHash,
-        allowedDomains: dto.domains || [],
-        ownerUserId: userId,
-      },
-    });
+      // Create channel (without encryptionMode if it doesn't exist in DB)
+      const channel = await this.prisma.channel.create({
+        data: {
+          name: dto.name,
+          tokenHash,
+          allowedDomains: dto.domains || [],
+          ownerUserId: userId,
+          // Do not include encryptionMode if column doesn't exist
+        },
+      });
 
-    return {
-      id: channel.id,
-      name: channel.name,
-      token, // показать только один раз
-    };
+      // Create ChannelMember for owner
+      try {
+        await this.prisma.channelMember.upsert({
+          where: {
+            channelId_userId: {
+              channelId: channel.id,
+              userId: userId,
+            },
+          },
+          update: {
+            role: 'owner',
+          },
+          create: {
+            channelId: channel.id,
+            userId: userId,
+            role: 'owner',
+          },
+        });
+      } catch (memberError: any) {
+        this.logger.warn(`Failed to create ChannelMember for owner: ${memberError.message}`);
+        // Continue even if member creation fails (non-critical for MVP)
+      }
+
+      return {
+        id: channel.id,
+        name: channel.name,
+        token, // показать только один раз
+      };
+    } catch (error: any) {
+      this.logger.error(`Project creation failed for user ${userId}`, error.stack || error.message);
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Project with this name already exists');
+        }
+        if (error.code === 'P2003' || error.message?.includes('permission denied')) {
+          this.logger.error('Database permission error', error);
+          throw new HttpException('Database access error', 500);
+        }
+        if (error.message?.includes('does not exist')) {
+          this.logger.error('Database schema mismatch', error);
+          throw new HttpException('Database schema error - please run migrations', 500);
+        }
+      }
+
+      if (error instanceof HttpException || error instanceof ConflictException) {
+        throw error;
+      }
+
+      this.logger.error('Unexpected project creation error', error);
+      throw new HttpException('Project creation failed', 500);
+    }
   }
 
   async findAll(userId: string) {
