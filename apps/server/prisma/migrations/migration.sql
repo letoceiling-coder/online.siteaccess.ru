@@ -1,9 +1,22 @@
--- CreateEnum
-CREATE TYPE " EncryptionMode\ AS ENUM ('none', 'server', 'e2ee');
+-- CreateTable
+CREATE TABLE " users\ (
+ \id\ TEXT NOT NULL,
+ \email\ TEXT NOT NULL,
+ \passwordHash\ TEXT NOT NULL,
+ \createdAt\ TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ \updatedAt\ TIMESTAMP(3) NOT NULL,
+
+ CONSTRAINT \users_pkey\ PRIMARY KEY (\id\)
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX \users_email_key\ ON \users\(\email\);
 
 -- AlterTable
-ALTER TABLE \channels\ ADD COLUMN \encryptionMode\ \EncryptionMode\ NOT NULL DEFAULT 'server';
+ALTER TABLE \channels\ ADD COLUMN \ownerUserId\ TEXT;
 
--- AlterTable
-ALTER TABLE \messages\ ADD COLUMN \ciphertext\ TEXT,
-ADD COLUMN \encryptionVersion\ INTEGER NOT NULL DEFAULT 0;
+-- CreateIndex
+CREATE INDEX \channels_ownerUserId_idx\ ON \channels\(\ownerUserId\);
+
+-- AddForeignKey
+ALTER TABLE \channels\ ADD CONSTRAINT \channels_ownerUserId_fkey\ FOREIGN KEY (\ownerUserId\) REFERENCES \users\(\id\) ON DELETE SET NULL ON UPDATE CASCADE;
