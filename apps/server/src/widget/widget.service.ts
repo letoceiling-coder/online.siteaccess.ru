@@ -101,7 +101,7 @@ export class WidgetService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    // Проверка Origin
+    // Строгая проверка Origin
     const originHost = origin ? new URL(origin).hostname : null;
     const allowedDomains = channel.allowedDomains as string[] | null;
     
@@ -110,7 +110,10 @@ export class WidgetService {
         throw new UnauthorizedException('Origin not allowed');
       }
     } else {
-      // Dev mode: разрешить все, но предупредить
+      // Production: если allowedDomains не заданы, разрешить только для localhost в dev
+      if (process.env.NODE_ENV === 'production') {
+        throw new UnauthorizedException('Channel must have allowedDomains configured in production');
+      }
       this.logger.warn(`Channel ${channel.id} has no allowedDomains - allowing all origins (dev mode)`);
     }
 

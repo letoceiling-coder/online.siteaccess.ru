@@ -20,6 +20,16 @@ import { RedisModule } from './redis.module';
       }),
       inject: [ConfigService],
     }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('OPERATOR_JWT_SECRET') || config.get('JWT_SECRET') || 'dev-secret',
+        signOptions: {
+          expiresIn: '7d',
+        },
+      }),
+      inject: [ConfigService],
+    }),
   ],
   providers: [WidgetGateway, OperatorGateway],
 })

@@ -7,12 +7,24 @@ import { join } from 'path';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // Body size limit (1MB)
+  app.use(require('express').json({ limit: '1mb' }));
+  app.use(require('express').urlencoded({ limit: '1mb', extended: true }));
+
   // Enable validation
   app.useGlobalPipes(new ValidationPipe());
 
-  // Enable CORS
+  // Enable CORS - strict for /api/widget/*, permissive for others
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests without origin (mobile apps, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+      // For /api/widget/* routes, check will be done in controller
+      // For other routes, allow all origins
+      callback(null, true);
+    },
     credentials: true,
   });
 

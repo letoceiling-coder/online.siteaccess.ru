@@ -9,7 +9,7 @@ export class OperatorController {
 
   @Get('conversations')
   @UseGuards(AuthGuard('operator-jwt'))
-  async getConversations(@Request() req: any, @Query('channelId') channelId: string) {
+  async getConversations(@Query('channelId') channelId: string, @Request() req: any) {
     // channelId from token should match query
     if (req.user.channelId !== channelId) {
       throw new Error('Channel ID mismatch');
@@ -20,9 +20,9 @@ export class OperatorController {
   @Get('messages')
   @UseGuards(AuthGuard('operator-jwt'))
   async getMessages(
-    @Request() req: any,
     @Query('conversationId') conversationId: string,
     @Query('limit') limit?: string,
+    @Request() req: any,
   ) {
     return this.operatorService.getMessages(conversationId, limit ? parseInt(limit) : 50);
   }
