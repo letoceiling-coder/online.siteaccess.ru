@@ -7,101 +7,86 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum EncryptionMode {
-  none
-  server
-  e2ee
-}
-
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
   passwordHash String
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
+  updatedAt    DateTime  @default(now()) @updatedAt
   channels     Channel[]
-  memberships  ChannelMember[]
 
   @@map("users")
 }
 
 model Channel {
-  id                String   @id @default(uuid())
-  name              String
-  tokenHash         String   @unique
-  allowedDomains    Json?    // ["site.ru", "www.site.ru"]
-  widgetSettings    Json?    // { position: "right", color: "#007bff", greeting: "..." }
-  encryptionMode    EncryptionMode @default(server)
-  ownerUserId       String?  // nullable сначала
-  installVerifiedAt DateTime?
-  lastWidgetPingAt  DateTime?
-  lastWidgetPingUrl String?
-  lastWidgetPingUserAgent String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  owner         User?    @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
-  visitors      Visitor[]
-  conversations Conversation[]
-  members       ChannelMember[]
+  id                      String         @id @default(uuid())
+  name                    String
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  tokenHash               String?        @unique(map: "channels_tokenhash_key")
+  allowedDomains          Json?
+  ownerUserId             String?
+  widgetsettings          Json?
+  installverifiedat       DateTime?
+  lastwidgetpingat        DateTime?
+  lastwidgetpingurl       String?
+  lastwidgetpinguseragent String?
+  encryptionmode          encryptionmode @default(server)
+  owner                   User?          @relation(fields: [ownerUserId], references: [id])
+  conversations           Conversation[]
+  visitors                Visitor[]
 
   @@index([ownerUserId])
   @@map("channels")
 }
 
 model Visitor {
-  id        String   @id @default(uuid())
-  channelId String
-  externalId String? @unique
-  lastSeenAt DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  id            String         @id @default(uuid())
+  channelId     String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  externalId    String?        @unique(map: "visitors_externalid_key")
+  lastSeenAt    DateTime       @default(now())
   conversations Conversation[]
+  channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
-  @@index([channelId])
-  @@index([externalId])
+  @@index([channelId], map: "visitors_channelid_idx")
+  @@index([externalId], map: "visitors_externalid_idx")
   @@map("visitors")
 }
 
 model Conversation {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   channelId String
   visitorId String
-  status    String   @default("open") // open, closed, archived
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  visitor  Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
-  messages Message[]
+  status    String    @default("active")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  visitor   Visitor   @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  messages  Message[]
 
   @@index([channelId])
   @@index([visitorId])
-  @@index([status])
   @@map("conversations")
 }
 
 model Message {
-  id             String   @id @default(uuid())
-  conversationId String
-  senderType     String   // "visitor" | "operator"
-  senderId       String?  // operator userId if senderType == "operator"
-  text           String?
-  ciphertext     String?  // зашифрованный текст (для encryptionMode: server/e2ee)
-  encryptionVersion Int   @default(0) // версия алгоритма шифрования
-  clientMessageId String? @unique // для дедупликации от виджета
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  attachments  Attachment[]
+  id              String       @id @default(uuid())
+  conversationId  String
+  senderType      String
+  senderId        String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  text            String?
+  clientMessageId String?      @unique(map: "messages_clientmessageid_key")
+  attachments     Attachment[]
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId])
   @@index([createdAt])
-  @@index([clientMessageId])
+  @@index([conversationId], map: "messages_conversationid_idx")
+  @@index([createdAt], map: "messages_createdat_idx")
   @@map("messages")
 }
 
@@ -110,29 +95,18 @@ model Attachment {
   messageId String
   url       String
   type      String
-  fileName  String?
   fileSize  Int?
   mimeType  String?
   createdAt DateTime @default(now())
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName  String?
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
   @@map("attachments")
 }
 
-model ChannelMember {
-  id        String   @id @default(cuid())
-  channelId String
-  userId    String
-  role      String   // 'owner' | 'operator' (MVP)
-  createdAt DateTime @default(now())
-
-  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([channelId, userId])
-  @@index([userId])
-  @@index([channelId])
-  @@map("channel_members")
+enum encryptionmode {
+  none
+  server
+  e2ee
 }
