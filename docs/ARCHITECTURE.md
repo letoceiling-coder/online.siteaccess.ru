@@ -144,3 +144,45 @@ Widget (visitor) <--WebRTC (media)--> TURN <--WebRTC (media)--> Operator Web
 - Redis pub/sub для multi-instance серверов
 - PostgreSQL для персистентности
 - Socket.IO Redis adapter для синхронизации WebSocket между инстансами
+
+## Encryption
+
+### Transport Security
+
+HTTPS/WSS (TLS) обязателен в production. Все HTTP запросы должны использовать HTTPS, все WebSocket соединения должны использовать WSS. TLS 1.2+ минимум. Валидные SSL сертификаты (Let's Encrypt или коммерческие).
+
+### At-Rest Encryption
+
+Пароли и токены:
+- Пароли: bcrypt или argon2 (не хранить в plaintext)
+- tokenHash: SHA-256 hash (уже реализовано)
+- JWT секреты: только в .env, никогда в git
+
+Опционально - шифрование сообщений:
+- AES-GCM для шифрования текста сообщений на сервере
+- Ключи шифрования в .env или в secure key management
+- Поле ciphertext в таблице messages для зашифрованных данных
+- Поле encryptionVersion для версионирования алгоритмов
+
+### End-to-End Encryption (E2EE)
+
+Статус: Future mode, не реализовано в MVP
+
+Планируемая архитектура:
+- E2EE будет опциональным режимом на уровне канала
+- Поле encryptionMode в таблице channels: 'none' | 'server' | 'e2ee'
+- Клиенты (widget + operator) будут обмениваться ключами через server (key exchange)
+- Server не сможет читать сообщения в E2EE режиме
+- Реализация отложена до Stage 2 или позже
+
+Текущий режим:
+- encryptionMode: 'none' - сообщения хранятся в plaintext (текущий MVP)
+- encryptionMode: 'server' - сообщения шифруются на сервере (AES-GCM, опционально)
+- encryptionMode: 'e2ee' - end-to-end шифрование (future)
+
+### SDK Encryption Interface
+
+В packages/sdk определен интерфейс для encrypt/decrypt:
+- Пока реализован как identity (passthrough)
+- В будущем будет заменен на реальное шифрование
+- Позволяет подготовить код для E2EE без breaking changes
