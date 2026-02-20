@@ -23,6 +23,9 @@ export class WidgetService {
     });
 
     if (!channel) {
+      // Log invalid token attempt (first 8 chars only, no secrets)
+      const tokenPreview = dto.token ? dto.token.substring(0, 8) + '...' : 'empty';
+      this.logger.warn(`Invalid token attempt: ${tokenPreview}, origin: ${origin || 'unknown'}`);
       throw new UnauthorizedException('Invalid token');
     }
 

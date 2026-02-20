@@ -70,4 +70,9 @@ export class ProjectsController {
   ) {
     return this.projectsService.updateSettings(id, dto.widgetSettings, req.user.id);
   }
+
+  @Post(':id/token')
+  async regenerateToken(@Param('id') id: string, @Request() req: any) {
+    return this.projectsService.regenerateToken(id, req.user.id);
+  }
 }

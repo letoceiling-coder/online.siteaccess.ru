@@ -31,7 +31,7 @@ export class ProjectsService {
 
       // Create ChannelMember for owner
       try {
-        await (this.prisma as any).channelMember.upsert({
+        await this.prisma.channelMember.upsert({
           where: {
             channelId_userId: {
               channelId: channel.id,
@@ -145,18 +145,46 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    // Найти token - нужно получить из базы или регенерировать
-    // Для MVP: вернем placeholder, так как token не хранится
-    // В реальности нужно либо хранить token (небезопасно), либо регенерировать и показывать только один раз
-    // Для STEP_03 используем placeholder
-
-    const scriptTag = '<script async src="https://online.siteaccess.ru/widget/v1/widget.min.js"></script>';
+    // Token is not stored - user must regenerate it
+    // Return snippet with placeholder and instructions
+    const scriptTag = '<script defer src="https://online.siteaccess.ru/widget/v1/widget.min.js"></script>';
     const configSnippet = `window.SiteAccessChat = { token: "YOUR_TOKEN_HERE", apiBase: "https://online.siteaccess.ru" };`;
 
     return {
       scriptTag,
       configSnippet,
-      docsMarkdownShort: `# Install Widget\n\nAdd the code below to your website's <head> section.\n\n**Note:** Replace YOUR_TOKEN_HERE with your project token (shown only once when creating the project).`,
+      hasToken: false,
+      docsMarkdownShort: `# Install Widget\n\n**Important:** You need to regenerate your project token first using the "Regenerate Token" button.\n\nAdd the code below to your website's <head> section, replacing YOUR_TOKEN_HERE with your actual token.`,
+    };
+  }
+
+  async regenerateToken(id: string, userId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (channel.ownerUserId !== userId) {
+      throw new ForbiddenException('Not authorized');
+    }
+
+    // Generate new token
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Update channel with new tokenHash
+    await this.prisma.channel.update({
+      where: { id },
+      data: { tokenHash },
+    });
+
+    // Return raw token ONCE (client must save it)
+    return {
+      token,
+      message: 'Token regenerated. Save this token now - it will not be shown again.',
     };
   }
 
@@ -173,7 +201,7 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    const members = await (this.prisma as any).channelMember.findMany({
+    const members = await this.prisma.channelMember.findMany({
       where: { channelId: id },
       include: {
         user: {
@@ -229,7 +257,7 @@ export class ProjectsService {
     }
 
     // Check if already a member
-    const existing = await (this.prisma as any).channelMember.findUnique({
+    const existing = await this.prisma.channelMember.findUnique({
       where: {
         channelId_userId: {
           channelId: id,
@@ -247,7 +275,7 @@ export class ProjectsService {
     }
 
     // Add as operator
-    await (this.prisma as any).channelMember.create({
+    await this.prisma.channelMember.create({
       data: {
         channelId: id,
         userId: user.id,
@@ -275,7 +303,7 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    await (this.prisma as any).channelMember.delete({
+    await this.prisma.channelMember.delete({
       where: {
         channelId_userId: {
           channelId: id,
