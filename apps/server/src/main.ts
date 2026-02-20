@@ -50,7 +50,9 @@ async function bootstrap() {
   // SPA fallback: serve portal index.html ONLY for GET requests
   // that don't match /api, /widget, /operator, /demo, /health
   // and are not already handled by static files
-  app.get('*', (req, res, next) => {
+  // Use express instance directly to avoid NestJS route registration issues
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.get('*', (req: any, res: any, next: any) => {
     const path = req.path;
     
     // Skip if already handled by static files or API
