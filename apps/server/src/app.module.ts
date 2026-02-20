@@ -5,6 +5,7 @@ import { ChannelsModule } from './channels/channels.module';
 import { WidgetModule } from './widget/widget.module';
 import { HealthModule } from './health/health.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { OperatorModule } from './operator/operator.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     WidgetModule,
     HealthModule,
     WebsocketModule,
+    OperatorModule,
   ],
 })
 export class AppModule {}

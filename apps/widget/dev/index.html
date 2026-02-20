@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang=" en\>
+<head>
+ <meta charset=\UTF-8\>
+ <meta name=\viewport\ content=\width=device-width initial-scale=1.0\>
+ <title>SiteAccess Chat Widget Demo</title>
+ <style>
+ body {
+ font-family: Arial, sans-serif;
+ padding: 40px;
+ max-width: 800px;
+ margin: 0 auto;
+ }
+ .info {
+ background: #f0f0f0;
+ padding: 20px;
+ border-radius: 8px;
+ margin-bottom: 20px;
+ }
+ </style>
+</head>
+<body>
+ <h1>SiteAccess Chat Widget Demo</h1>
+ <div class=\info\>
+ <p><strong>Token:</strong> <span id=\token-display\>Loading...</span></p>
+ <p>Click the chat button in the bottom-right corner to start chatting.</p>
+ </div>
+
+ <script>
+ // Get token from URL or use placeholder
+ const urlParams = new URLSearchParams(window.location.search);
+ const token = urlParams.get('token') || 'YOUR_CHANNEL_TOKEN_HERE';
+ document.getElementById('token-display').textContent = token;
+
+ window.SiteAccessChat = {
+ token: token
+ };
+ </script>
+ <script type=\module\ src=\/src/index.ts\></script>
+</body>
+</html>

@@ -9,11 +9,14 @@ export class OperatorAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
     const devToken = this.config.get('OPERATOR_DEV_TOKEN');
-    const clientToken = client.handshake.headers['x-operator-dev-token'];
+    
+    // РџСЂРѕРІРµСЂРєР° dev token РёР· auth РёР»Рё headers
+    const clientToken = client.handshake.auth?.devToken || 
+                       client.handshake.headers['x-operator-dev-token'] as string;
 
     // DEV СЂРµР¶РёРј
     if (devToken && clientToken === devToken) {
-      const channelId = client.handshake.query?.channelId;
+      const channelId = client.handshake.query?.channelId || client.handshake.auth?.channelId;
       if (channelId && typeof channelId === 'string') {
         client.data.channelId = channelId;
         client.data.isDev = true;
