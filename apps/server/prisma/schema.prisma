@@ -8,12 +8,12 @@ datasource db {
 }
 
 model Channel {
-  id            String   @id @default(uuid())
-  name          String
-  tokenHash     String   @unique
-  allowedDomains Json?  // ["site.ru", "www.site.ru"]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(uuid())
+  name           String
+  tokenHash      String   @unique
+  allowedDomains Json? // ["site.ru", "www.site.ru"]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   visitors      Visitor[]
   conversations Conversation[]
@@ -22,12 +22,12 @@ model Channel {
 }
 
 model Visitor {
-  id        String   @id @default(uuid())
-  channelId String
-  externalId String? @unique
+  id         String   @id @default(uuid())
+  channelId  String
+  externalId String?  @unique
   lastSeenAt DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
   conversations Conversation[]
@@ -45,8 +45,8 @@ model Conversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  visitor  Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  channel  Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  visitor  Visitor   @relation(fields: [visitorId], references: [id], onDelete: Cascade)
   messages Message[]
 
   @@index([channelId])
@@ -56,16 +56,16 @@ model Conversation {
 }
 
 model Message {
-  id             String   @id @default(uuid())
-  conversationId String
-  senderType     String   // "visitor" | "operator"
-  senderId       String?  // operator userId if senderType == "operator"
-  text           String?
-  clientMessageId String? @unique // для дедупликации от виджета
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(uuid())
+  conversationId  String
+  senderType      String // "visitor" | "operator"
+  senderId        String? // operator userId if senderType == "operator"
+  text            String?
+  clientMessageId String?  @unique // для дедупликации от виджета
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   attachments  Attachment[]
 
   @@index([conversationId])
