@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ChannelsModule } from './channels/channels.module';
 import { WidgetModule } from './widget/widget.module';
 import { HealthModule } from './health/health.module';
+import { WebsocketModule } from './websocket/websocket.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { HealthModule } from './health/health.module';
     ChannelsModule,
     WidgetModule,
     HealthModule,
+    WebsocketModule,
   ],
 })
 export class AppModule {}
