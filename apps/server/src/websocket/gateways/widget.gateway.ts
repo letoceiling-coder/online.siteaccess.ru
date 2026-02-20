@@ -4,12 +4,10 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
-  UseGuards,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Injectable, Logger, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Injectable, Logger, UseGuards, UsePipes, ValidationPipe, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Inject } from '@nestjs/common';
 import Redis from 'ioredis';
 import { WidgetAuthGuard } from '../middleware/widget-auth.middleware';
 
