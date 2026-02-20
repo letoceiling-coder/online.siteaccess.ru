@@ -45,9 +45,20 @@ function App() {
     }
   }, []);
 
+  const validateUUID = (uuid: string): boolean => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  };
+
   const handleLogin = async () => {
     if (!email || !password || !channelId) {
-      setError('Please enter email, password, and channel ID');
+      setError('Please enter email, password, and project ID');
+      return;
+    }
+
+    // Validate UUID format (reject 64-hex tokenHash)
+    if (!validateUUID(channelId)) {
+      setError('Project ID must be a valid UUID format (e.g., 550e8400-e29b-41d4-a716-446655440000). Do not use the token.');
       return;
     }
 
@@ -231,13 +242,17 @@ function App() {
             />
           </div>
           <div className="form-group">
-            <label>Channel ID:</label>
+            <label>Project ID (UUID):</label>
             <input
               type="text"
               value={channelId}
               onChange={(e) => setChannelId(e.target.value)}
-              placeholder="Enter channel ID"
+              placeholder="Enter project UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)"
+              pattern="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
             />
+            <small style={{ color: '#666', fontSize: '12px', display: 'block', marginTop: '4px' }}>
+              This is the Project/Channel UUID from your portal dashboard, not the token.
+            </small>
           </div>
           {error && <div className="error">{error}</div>}
           <button onClick={handleLogin} className="connect-btn">

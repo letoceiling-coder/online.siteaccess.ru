@@ -76,7 +76,7 @@ export class OperatorService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check membership
+    // Check membership (use type assertion for channelMember)
     const membership = await (this.prisma as any).channelMember.findUnique({
       where: {
         channelId_userId: {

@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
+import { OperatorModule } from './operator/operator.module';
 
 @Module({
   imports: [
@@ -44,8 +45,9 @@ import { ProjectsModule } from './projects/projects.module';
     HealthModule,
     WebsocketModule,
     AuthModule,
-            ProjectsModule,
-          ],
+    ProjectsModule,
+    OperatorModule,
+  ],
           providers: [
             {
               provide: APP_GUARD,
