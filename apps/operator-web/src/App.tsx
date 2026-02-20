@@ -20,8 +20,9 @@ interface Message {
 }
 
 function App() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [channelId, setChannelId] = useState('');
-  const [devToken, setDevToken] = useState(localStorage.getItem('operator_dev_token') || '');
   const [connected, setConnected] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
@@ -30,26 +31,66 @@ function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [onlineVisitors, setOnlineVisitors] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [operatorToken, setOperatorToken] = useState<string | null>(
+    localStorage.getItem('operator_token') || null
+  );
+  const [operatorChannelId, setOperatorChannelId] = useState<string | null>(
+    localStorage.getItem('operator_channel_id') || null
+  );
 
   useEffect(() => {
-    if (devToken) {
-      localStorage.setItem('operator_dev_token', devToken);
+    if (operatorToken && operatorChannelId) {
+      // Auto-connect if token exists
+      handleConnectWithToken(operatorToken, operatorChannelId);
     }
-  }, [devToken]);
+  }, []);
 
-  const handleConnect = async () => {
-    if (!channelId || !devToken) {
-      setError('Please enter Channel ID and Dev Token');
+  const handleLogin = async () => {
+    if (!email || !password || !channelId) {
+      setError('Please enter email, password, and channel ID');
       return;
     }
 
     setError(null);
 
     try {
-      // Fetch conversations
-      const response = await fetch(`${API_URL}/api/operator/dev/conversations?channelId=${channelId}`, {
+      const response = await fetch(`${API_URL}/api/operator/auth/login`, {
+        method: 'POST',
         headers: {
-          'x-operator-dev-token': devToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          channelId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
+      }
+
+      const data = await response.json();
+      setOperatorToken(data.operatorAccessToken);
+      setOperatorChannelId(data.channelId);
+      localStorage.setItem('operator_token', data.operatorAccessToken);
+      localStorage.setItem('operator_channel_id', data.channelId);
+
+      await handleConnectWithToken(data.operatorAccessToken, data.channelId);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    }
+  };
+
+  const handleConnectWithToken = async (token: string, chId: string) => {
+    setError(null);
+
+    try {
+      // Fetch conversations
+      const response = await fetch(`${API_URL}/api/operator/conversations?channelId=${chId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -63,7 +104,7 @@ function App() {
 
       // Connect WebSocket
       const ws = io(`${WS_URL}/operator`, {
-        auth: { devToken, channelId },
+        auth: { token },
         transports: ['websocket', 'polling'],
       });
 
@@ -86,7 +127,7 @@ function App() {
       });
 
       ws.on('presence:update', (data: any) => {
-        if (data.channelId === channelId) {
+        if (data.channelId === chId) {
           setOnlineVisitors(data.onlineVisitors || 0);
         }
       });
@@ -106,12 +147,14 @@ function App() {
     setSelectedConversation(conversationId);
     setMessages([]);
 
+    if (!operatorToken) return;
+
     try {
       const response = await fetch(
-        `${API_URL}/api/operator/dev/messages?conversationId=${conversationId}&limit=50`,
+        `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
         {
           headers: {
-            'x-operator-dev-token': devToken,
+            Authorization: `Bearer ${operatorToken}`,
           },
         }
       );
@@ -152,11 +195,41 @@ function App() {
     setMessageInput('');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('operator_token');
+    localStorage.removeItem('operator_channel_id');
+    setOperatorToken(null);
+    setOperatorChannelId(null);
+    setConnected(false);
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+  };
+
   return (
     <div className="app">
       {!connected ? (
         <div className="connect-panel">
-          <h1>Operator Web - Dev Mode</h1>
+          <h1>Operator Web</h1>
+          <div className="form-group">
+            <label>Email:</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+            />
+          </div>
+          <div className="form-group">
+            <label>Password:</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+            />
+          </div>
           <div className="form-group">
             <label>Channel ID:</label>
             <input
@@ -166,18 +239,9 @@ function App() {
               placeholder="Enter channel ID"
             />
           </div>
-          <div className="form-group">
-            <label>Dev Token:</label>
-            <input
-              type="password"
-              value={devToken}
-              onChange={(e) => setDevToken(e.target.value)}
-              placeholder="Enter OPERATOR_DEV_TOKEN"
-            />
-          </div>
           {error && <div className="error">{error}</div>}
-          <button onClick={handleConnect} className="connect-btn">
-            Connect
+          <button onClick={handleLogin} className="connect-btn">
+            Login
           </button>
         </div>
       ) : (
@@ -186,6 +250,9 @@ function App() {
             <div className="sidebar-header">
               <h2>Conversations</h2>
               <div className="online-count">Online: {onlineVisitors}</div>
+              <button onClick={handleLogout} className="logout-btn">
+                Logout
+              </button>
             </div>
             <div className="conversations-list">
               {conversations.map((conv) => (
