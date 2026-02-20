@@ -7,13 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum EncryptionMode {
+  none
+  server
+  e2ee
+}
+
 model Channel {
-  id             String   @id @default(uuid())
+  id             String         @id @default(uuid())
   name           String
-  tokenHash      String   @unique
+  tokenHash      String         @unique
   allowedDomains Json? // ["site.ru", "www.site.ru"]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  encryptionMode EncryptionMode @default(server)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   visitors      Visitor[]
   conversations Conversation[]
@@ -56,14 +63,16 @@ model Conversation {
 }
 
 model Message {
-  id              String   @id @default(uuid())
-  conversationId  String
-  senderType      String // "visitor" | "operator"
-  senderId        String? // operator userId if senderType == "operator"
-  text            String?
-  clientMessageId String?  @unique // для дедупликации от виджета
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(uuid())
+  conversationId    String
+  senderType        String // "visitor" | "operator"
+  senderId          String? // operator userId if senderType == "operator"
+  text              String?
+  ciphertext        String? // зашифрованный текст (для encryptionMode: server/e2ee)
+  encryptionVersion Int      @default(0) // версия алгоритма шифрования
+  clientMessageId   String?  @unique // для дедупликации от виджета
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   attachments  Attachment[]
