@@ -19,7 +19,10 @@ async function bootstrap() {
   // SPA fallback for portal (after all routes)
   // This must be after all other routes are registered
   const portalDistPath = join(__dirname, '..', '..', 'portal', 'dist');
+  
+  // Serve static assets from portal
   app.useStaticAssets(portalDistPath, {
+    prefix: '/',
     index: false,
   });
 
@@ -29,7 +32,8 @@ async function bootstrap() {
       !req.path.startsWith('/api') &&
       !req.path.startsWith('/widget') &&
       !req.path.startsWith('/operator') &&
-      !req.path.startsWith('/demo')
+      !req.path.startsWith('/demo') &&
+      !req.path.startsWith('/health')
     ) {
       res.sendFile(join(portalDistPath, 'index.html'));
     } else {
