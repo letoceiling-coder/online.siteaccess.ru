@@ -119,14 +119,14 @@ export class WidgetService {
 
     // Обновить channel
     const updateData: any = {
-      lastWidgetPingAt: new Date(),
-      lastWidgetPingUrl: dto.pageUrl,
-      lastWidgetPingUserAgent: userAgent || null,
+      lastwidgetpingat: new Date(),
+      lastwidgetpingurl: dto.pageUrl,
+      lastwidgetpinguseragent: userAgent || null,
     };
 
     // Установить installVerifiedAt только если еще не установлен
-    if (!channel.installVerifiedAt) {
-      updateData.installVerifiedAt = new Date();
+    if (!(channel as any).installverifiedat) {
+      updateData.installverifiedat = new Date();
     }
 
     await this.prisma.channel.update({

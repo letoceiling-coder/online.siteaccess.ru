@@ -304,11 +304,11 @@ export class ProjectsService {
       id: channel.id,
       name: channel.name,
       allowedDomains: channel.allowedDomains,
-      widgetSettings: channel.widgetSettings,
-      installVerifiedAt: channel.installVerifiedAt?.toISOString() || null,
-      lastWidgetPingAt: channel.lastWidgetPingAt?.toISOString() || null,
-      lastWidgetPingUrl: channel.lastWidgetPingUrl,
-      lastWidgetPingUserAgent: channel.lastWidgetPingUserAgent,
+      widgetSettings: (channel as any).widgetsettings,
+      installVerifiedAt: (channel as any).installverifiedat?.toISOString() || null,
+      lastWidgetPingAt: (channel as any).lastwidgetpingat?.toISOString() || null,
+      lastWidgetPingUrl: (channel as any).lastwidgetpingurl,
+      lastWidgetPingUserAgent: (channel as any).lastwidgetpinguseragent,
       createdAt: channel.createdAt.toISOString(),
       updatedAt: channel.updatedAt.toISOString(),
     };
@@ -330,13 +330,13 @@ export class ProjectsService {
     const updated = await this.prisma.channel.update({
       where: { id },
       data: {
-        widgetSettings,
-      },
+        widgetsettings: widgetSettings,
+      } as any,
     });
 
     return {
       id: updated.id,
-      widgetSettings: updated.widgetSettings,
+      widgetSettings: (updated as any).widgetsettings,
     };
   }
 }
