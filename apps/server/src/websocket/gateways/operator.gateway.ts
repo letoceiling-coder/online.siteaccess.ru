@@ -9,7 +9,7 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger, UseGuards, UsePipes, ValidationPipe, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import Redis from 'ioredis';
-import { OperatorAuthGuard } from '../middleware/widget-auth.middleware';
+import { OperatorAuthGuard } from '../middleware/operator-auth.middleware';
 
 @WebSocketGateway({
   namespace: '/widget',
