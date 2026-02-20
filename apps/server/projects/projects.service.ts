@@ -233,4 +233,57 @@ export class ProjectsService {
 
     return { success: true };
   }
+
+  async findOne(id: string, userId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (channel.ownerUserId !== userId) {
+      throw new ForbiddenException('Not authorized');
+    }
+
+    return {
+      id: channel.id,
+      name: channel.name,
+      allowedDomains: channel.allowedDomains,
+      widgetSettings: channel.widgetSettings,
+      installVerifiedAt: channel.installVerifiedAt?.toISOString() || null,
+      lastWidgetPingAt: channel.lastWidgetPingAt?.toISOString() || null,
+      lastWidgetPingUrl: channel.lastWidgetPingUrl,
+      lastWidgetPingUserAgent: channel.lastWidgetPingUserAgent,
+      createdAt: channel.createdAt.toISOString(),
+      updatedAt: channel.updatedAt.toISOString(),
+    };
+  }
+
+  async updateSettings(id: string, widgetSettings: any, userId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: { id },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('Project not found');
+    }
+
+    if (channel.ownerUserId !== userId) {
+      throw new ForbiddenException('Not authorized');
+    }
+
+    const updated = await this.prisma.channel.update({
+      where: { id },
+      data: {
+        widgetSettings,
+      },
+    });
+
+    return {
+      id: updated.id,
+      widgetSettings: updated.widgetSettings,
+    };
+  }
 }

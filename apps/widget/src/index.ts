@@ -52,8 +52,32 @@ class SiteAccessChatWidget {
       localStorage.setItem('sa_external_id', this.externalId);
     }
 
+    // Send ping to verify installation
+    this.sendPing();
+
     this.createUI();
     this.setupEventListeners();
+  }
+
+  private async sendPing() {
+    if (!this.config || !this.config.token) return;
+
+    try {
+      await fetch(`${this.apiBase}/api/widget/ping`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token: this.config.token,
+          externalId: this.externalId,
+          pageUrl: window.location.href,
+        }),
+      });
+    } catch (error) {
+      // Silently fail - don't break widget if ping fails
+      console.warn('SiteAccessChat: ping failed', error);
+    }
   }
 
   private generateUUID(): string {

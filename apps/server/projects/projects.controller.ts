@@ -56,4 +56,18 @@ export class ProjectsController {
   ) {
     return this.projectsService.removeOperator(id, userId, req.user.id);
   }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string, @Request() req: any) {
+    return this.projectsService.findOne(id, req.user.id);
+  }
+
+  @Put(':id/settings')
+  async updateSettings(
+    @Param('id') id: string,
+    @Body() dto: { widgetSettings: any },
+    @Request() req: any,
+  ) {
+    return this.projectsService.updateSettings(id, dto.widgetSettings, req.user.id);
+  }
 }
