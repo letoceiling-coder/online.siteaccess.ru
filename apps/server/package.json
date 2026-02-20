@@ -12,8 +12,30 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules"
   },
-  "dependencies": {},
-  "devDependencies": {},
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/platform-express": "^10.0.0",
+    "@prisma/client": "^5.0.0",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.1",
+    "@nestjs/jwt": "^10.0.0",
+    "@nestjs/passport": "^10.0.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "crypto": "*",
+    "@nestjs/config": "^3.0.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.0.0",
+    "@nestjs/schematics": "^10.0.0",
+    "@types/node": "^20.10.0",
+    "prisma": "^5.0.0",
+    "typescript": "^5.3.0",
+    "@types/passport-jwt": "^4.0.0",
+    "@types/uuid": "^9.0.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

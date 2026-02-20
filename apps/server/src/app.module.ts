@@ -1,21 +1,17 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { ChannelsModule } from './channels/channels.module';
-import { VisitorsModule } from './visitors/visitors.module';
-import { ConversationsModule } from './conversations/conversations.module';
-import { MessagesModule } from './messages/messages.module';
-import { AttachmentsModule } from './attachments/attachments.module';
-import { WebsocketModule } from './websocket/websocket.module';
+import { WidgetModule } from './widget/widget.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
     PrismaModule,
     ChannelsModule,
-    VisitorsModule,
-    ConversationsModule,
-    MessagesModule,
-    AttachmentsModule,
-    WebsocketModule,
+    WidgetModule,
   ],
 })
 export class AppModule {}

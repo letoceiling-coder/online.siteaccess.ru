@@ -8,12 +8,12 @@ datasource db {
 }
 
 model Channel {
-  id        String   @id @default(uuid())
-  name      String
-  domain    String?  @unique
-  apiKey    String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  name          String
+  tokenHash     String   @unique
+  allowedDomains Json?  // ["site.ru", "www.site.ru"]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   visitors      Visitor[]
   conversations Conversation[]
@@ -24,15 +24,16 @@ model Channel {
 model Visitor {
   id        String   @id @default(uuid())
   channelId String
-  name      String?
-  email     String?
-  metadata  Json?
+  externalId String? @unique
+  lastSeenAt DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
   conversations Conversation[]
 
+  @@index([channelId])
+  @@index([externalId])
   @@map("visitors")
 }
 
@@ -40,7 +41,7 @@ model Conversation {
   id        String   @id @default(uuid())
   channelId String
   visitorId String
-  status    String   @default("active")
+  status    String   @default("open") // open, closed, archived
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -50,16 +51,17 @@ model Conversation {
 
   @@index([channelId])
   @@index([visitorId])
+  @@index([status])
   @@map("conversations")
 }
 
 model Message {
   id             String   @id @default(uuid())
   conversationId String
-  senderType     String
-  senderId       String?
-  content        String?
-  messageType    String   @default("text")
+  senderType     String   // "visitor" | "operator"
+  senderId       String?  // operator userId if senderType == "operator"
+  text           String?
+  clientMessageId String? @unique // для дедупликации от виджета
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -68,6 +70,7 @@ model Message {
 
   @@index([conversationId])
   @@index([createdAt])
+  @@index([clientMessageId])
   @@map("messages")
 }
 
