@@ -7,6 +7,8 @@ import { ChannelsModule } from './channels/channels.module';
 import { WidgetModule } from './widget/widget.module';
 import { HealthModule } from './health/health.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { AuthModule } from './auth/auth.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -28,11 +30,20 @@ import { WebsocketModule } from './websocket/websocket.module';
         index: 'index.html',
       },
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'portal', 'dist'),
+      serveRoot: '/',
+      serveStaticOptions: {
+        index: 'index.html',
+      },
+    }),
     PrismaModule,
     ChannelsModule,
     WidgetModule,
     HealthModule,
     WebsocketModule,
+    AuthModule,
+    ProjectsModule,
   ],
 })
 export class AppModule {}
