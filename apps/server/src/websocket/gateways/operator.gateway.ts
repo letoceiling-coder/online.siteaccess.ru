@@ -30,14 +30,13 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     @Inject('REDIS_CLIENT') private redis: Redis,
   ) {}
 
-  async handleConnection(client: Socket) {
+    const { channelId } = client.data;
     const { channelId, conversationId } = client.data;
-    client.join(`channel:${channelId}`);
     client.join(`conversation:${conversationId}`);
-    this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
+    this.logger.log(Operator connected: , channel: \);
   }
 
-  async handleDisconnect(client: Socket) {
+    this.logger.log(Operator disconnected: \);
     this.logger.log(`Widget disconnected: ${client.id}`);
   }
 
