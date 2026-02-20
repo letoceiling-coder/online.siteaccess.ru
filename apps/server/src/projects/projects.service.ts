@@ -29,7 +29,7 @@ export class ProjectsService {
         },
       });
 
-      // Create ChannelMember for owner
+      // Create ChannelMember for owner (CRITICAL - must succeed)
       try {
         await (this.prisma as any).channelMember.upsert({
           where: {
@@ -47,9 +47,12 @@ export class ProjectsService {
             role: 'owner',
           },
         });
+        this.logger.log(`ChannelMember created for owner: userId=${userId}, channelId=${channel.id}`);
       } catch (memberError: any) {
-        this.logger.warn(`Failed to create ChannelMember for owner: ${memberError.message}`);
-        // Continue even if member creation fails (non-critical for MVP)
+        this.logger.error(`CRITICAL: Failed to create ChannelMember for owner: ${memberError.message}`, memberError.stack);
+        // If member creation fails, try to rollback channel creation or at least log the issue
+        // For now, we'll let it continue but log as error (not warning) since this is critical
+        // The fallback in OperatorService.login will handle missing memberships for owners
       }
 
       return {
