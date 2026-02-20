@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -26,6 +27,21 @@ export class AuthController {
     return {
       id: req.user.id,
       email: req.user.email,
+      createdAt: req.user.createdAt,
+    };
+  }
+}
+
+// Alias controller for /api/me (backward compatibility)
+@Controller('api')
+export class MeController {
+  @Get('me')
+  @UseGuards(AuthGuard('jwt'))
+  async getMe(@Request() req: any) {
+    return {
+      id: req.user.id,
+      email: req.user.email,
+      createdAt: req.user.createdAt,
     };
   }
 }
