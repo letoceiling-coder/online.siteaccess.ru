@@ -52,8 +52,8 @@ async function main() {
     }),
   });
   console.log(`Status: ${ownerLogin.status}`);
-  if (ownerLogin.status === 200) {
-    console.log(`✅ Owner login successful`);
+  if (ownerLogin.status === 200 || ownerLogin.status === 201) {
+    console.log(`✅ Owner login successful (status ${ownerLogin.status})`);
     console.log(`Token: ${truncateToken(ownerLogin.body.accessToken)}`);
   } else {
     console.log(`❌ Owner login failed: ${JSON.stringify(ownerLogin.body)}`);
