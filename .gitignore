@@ -1,18 +1,19 @@
 # Dependencies
 node_modules/
-vendor/
-venv/
-__pycache__/
+.pnp
+.pnp.js
 
 # Environment
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Build
 dist/
 build/
 *.log
+*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -20,11 +21,16 @@ build/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Temporary files
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary
 *.tmp
 *.temp
+.cache/
+
+# OS
+Thumbs.db
