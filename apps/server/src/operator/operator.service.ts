@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class OperatorService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+  ) {}
 
   async getConversations(channelId: string) {
     const conversations = await this.prisma.conversation.findMany({
@@ -53,5 +59,57 @@ export class OperatorService {
       senderType: msg.senderType,
       createdAt: msg.createdAt.toISOString(),
     }));
+  }
+
+  async login(email: string, password: string, channelId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check membership
+    const membership = await this.prisma.channelMember.findUnique({
+      where: {
+        channelId_userId: {
+          channelId,
+          userId: user.id,
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('User is not a member of this channel');
+    }
+
+    const payload = {
+      sub: user.id,
+      userId: user.id,
+      channelId,
+      role: membership.role,
+    };
+
+    const operatorAccessToken = this.jwtService.sign(payload, {
+      secret: process.env.OPERATOR_JWT_SECRET || process.env.JWT_SECRET || 'dev-secret',
+      expiresIn: '7d',
+    });
+
+    return {
+      operatorAccessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+      },
+      channelId,
+      role: membership.role,
+    };
   }
 }

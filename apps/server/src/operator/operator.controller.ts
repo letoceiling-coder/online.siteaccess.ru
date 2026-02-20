@@ -1,37 +1,39 @@
-import { Controller, Get, Query, Headers, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, Request, Query } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { OperatorService } from './operator.service';
-import { ConfigService } from '@nestjs/config';
+import { AddOperatorDto } from './dto/add-operator.dto';
 
-@Controller('api/operator/dev')
+@Controller('api/operator')
 export class OperatorController {
-  constructor(
-    private operatorService: OperatorService,
-    private config: ConfigService,
-  ) {}
-
-  private checkDevToken(token?: string): void {
-    const devToken = this.config.get('OPERATOR_DEV_TOKEN');
-    if (!devToken || token !== devToken) {
-      throw new UnauthorizedException('Invalid dev token');
-    }
-  }
+  constructor(private operatorService: OperatorService) {}
 
   @Get('conversations')
-  async getConversations(
-    @Query('channelId') channelId: string,
-    @Headers('x-operator-dev-token') token?: string,
-  ) {
-    this.checkDevToken(token);
+  @UseGuards(AuthGuard('operator-jwt'))
+  async getConversations(@Request() req: any, @Query('channelId') channelId: string) {
+    // channelId from token should match query
+    if (req.user.channelId !== channelId) {
+      throw new Error('Channel ID mismatch');
+    }
     return this.operatorService.getConversations(channelId);
   }
 
   @Get('messages')
+  @UseGuards(AuthGuard('operator-jwt'))
   async getMessages(
+    @Request() req: any,
     @Query('conversationId') conversationId: string,
     @Query('limit') limit?: string,
-    @Headers('x-operator-dev-token') token?: string,
   ) {
-    this.checkDevToken(token);
     return this.operatorService.getMessages(conversationId, limit ? parseInt(limit) : 50);
+  }
+}
+
+@Controller('api/operator/auth')
+export class OperatorAuthController {
+  constructor(private operatorService: OperatorService) {}
+
+  @Post('login')
+  async login(@Body() dto: { email: string; password: string; channelId: string }) {
+    return this.operatorService.login(dto.email, dto.password, dto.channelId);
   }
 }
