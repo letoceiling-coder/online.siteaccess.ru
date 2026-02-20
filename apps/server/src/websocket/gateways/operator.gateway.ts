@@ -29,11 +29,11 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     private prisma: PrismaService,
     @Inject('REDIS_CLIENT') private redis: Redis,
   ) {}
-
+    client.join(annel:\);
     const { channelId, conversationId } = client.data;
-    client.join(`channel:${channelId}`);
+    this.logger.log(Operator connected: , channel: \);
   async handleConnection(client: Socket) {
-    const { channelId } = client.data;
+    this.logger.log(Operator disconnected: \);
     client.join(\channel:\\);
     this.logger.log(\Operator connected: \, channel: \\);
   }
