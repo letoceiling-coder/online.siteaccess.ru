@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Channel {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?  @unique
+  apiKey    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visitors      Visitor[]
+  conversations Conversation[]
+
+  @@map("channels")
+}
+
+model Visitor {
+  id        String   @id @default(uuid())
+  channelId String
+  name      String?
+  email     String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@map("visitors")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  channelId String
+  visitorId String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  visitor  Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([channelId])
+  @@index([visitorId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderType     String
+  senderId       String?
+  content        String?
+  messageType    String   @default("text")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  Attachment[]
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model Attachment {
+  id        String   @id @default(uuid())
+  messageId String
+  url       String
+  type      String
+  fileName  String?
+  fileSize  Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("attachments")
+}

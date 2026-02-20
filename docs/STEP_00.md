@@ -48,6 +48,23 @@ online.siteaccess.ru/
 - `docs/ARCHITECTURE.md` - архитектура системы
 - `docs/STEP_00.md` - этот файл
 
+### 6. Безопасность (STEP 00.5)
+
+- ✅ Удалены все реальные TURN credentials из документации
+- ✅ Созданы `.env.example` файлы (без значений, только ключи)
+- ✅ Добавлены предупреждения о недопустимости хранения секретов в git
+- ✅ Все секреты должны храниться только в `.env` (не коммитится в git)
+
+**Файлы .env.example**:
+- `apps/server/.env.example` - переменные для backend
+- `apps/widget/.env.example` - переменные для widget (build time)
+
+**⚠️ ВАЖНО**: 
+- Никогда не коммитить реальные значения в `.env` файлы
+- Использовать только `.env.example` как шаблон
+- Все секреты (JWT_SECRET, TURN_CREDENTIAL, DATABASE_URL с паролем) должны быть в `.env`
+- `.env` файлы уже в `.gitignore`
+
 ## Как проверить
 
 ### 1. Проверить структуру
@@ -115,7 +132,34 @@ cat docs/ARCHITECTURE.md | head -20
 - `STEP_00.md` существует
 - Оба файла содержат текст
 
-### 6. Проверить Git статус
+### 6. Проверить .env.example файлы
+
+```bash
+cd /var/www/online.siteaccess.ru
+ls -la apps/server/.env.example
+ls -la apps/widget/.env.example
+cat apps/server/.env.example
+cat apps/widget/.env.example
+```
+
+**Ожидаемый результат**: 
+- Оба файла существуют
+- Не содержат реальных значений (только пустые ключи)
+- Содержат предупреждения о безопасности
+
+### 7. Проверить отсутствие секретов в git
+
+```bash
+cd /var/www/online.siteaccess.ru
+git diff
+git grep -i 'turn_fdf8b6e8\|U1cM4fhoxxqTnbb8XE9n' --exclude-dir=.git || echo 'No secrets found'
+```
+
+**Ожидаемый результат**: 
+- `git diff` не должен содержать реальных credentials
+- `git grep` не должен находить секреты
+
+### 8. Проверить Git статус
 
 ```bash
 cd /var/www/online.siteaccess.ru
@@ -133,10 +177,11 @@ git log --oneline
 2. Настроить TypeScript конфигурации
 3. Создать базовые файлы для каждого приложения
 4. Настроить линтеры (ESLint)
-5. Создать .env.example файлы
+5. Создать реальные `.env` файлы из `.env.example` (локально, не коммитить!)
 
 ## Примечания
 
 - Бизнес-логика еще не реализована
 - Только каркас репозитория
-- Все секреты будут в .env (не в git)
+- **Все секреты должны быть в .env (не в git)**
+- **Никогда не коммитить реальные credentials**
