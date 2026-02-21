@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import './App.css';
 
@@ -36,7 +36,12 @@ function App() {
     return saved !== null ? saved === 'true' : true;
   });
   const [soundBlocked, setSoundBlocked] = useState(false);
+  const [soundUnlocked, setSoundUnlocked] = useState(false);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const messagesWrapRef = useRef<HTMLDivElement | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const lastSoundPlayTime = useRef<number>(0);
   const [operatorToken, setOperatorToken] = useState<string | null>(
     localStorage.getItem('operatorAccessToken') || null
   );
@@ -46,7 +51,7 @@ function App() {
 
   // Initialize audio element
   useEffect(() => {
-    const audio = new Audio('/new-message.mp3');
+    const audio = new Audio('/sounds/new-message.mp3');
     audio.preload = 'auto';
     setAudioRef(audio);
     
@@ -61,8 +66,74 @@ function App() {
     };
   }, []);
 
+  // Unlock sound on first user interaction
+  useEffect(() => {
+    const unlockSound = () => {
+      if (!soundUnlocked && audioRef) {
+        audioRef.play().then(() => {
+          setSoundUnlocked(true);
+          setSoundBlocked(false);
+        }).catch(() => {
+          // Still blocked, keep button
+        });
+      }
+    };
+
+    const handlePointerDown = () => {
+      unlockSound();
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+
+    const handleKeyDown = () => {
+      unlockSound();
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+
+    if (!soundUnlocked) {
+      document.addEventListener('pointerdown', handlePointerDown);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [soundUnlocked, audioRef]);
+
+  // Check if near bottom of scroll
+  const isNearBottom = useCallback((): boolean => {
+    if (!messagesWrapRef.current) return true;
+    const { scrollTop, scrollHeight, clientHeight } = messagesWrapRef.current;
+    const threshold = 100; // pixels from bottom
+    return scrollHeight - scrollTop - clientHeight < threshold;
+  }, []);
+
+  // Scroll to bottom
+  const scrollToBottom = useCallback((behavior: 'smooth' | 'auto' = 'smooth') => {
+    if (endRef.current) {
+      endRef.current.scrollIntoView({ behavior, block: 'end' });
+    }
+  }, []);
+
   // Get messages for selected conversation
   const messages = selectedConversation ? (messagesByConversation[selectedConversation] || []) : [];
+
+  // Auto-scroll when messages change for selected conversation
+  useEffect(() => {
+    if (selectedConversation && messages.length > 0) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        if (isNearBottom()) {
+          scrollToBottom('smooth');
+          setShowScrollButton(false);
+        } else {
+          setShowScrollButton(true);
+        }
+      }, 100);
+    }
+  }, [messages, selectedConversation, isNearBottom, scrollToBottom]);
 
   useEffect(() => {
     if (operatorToken && operatorChannelId) {
@@ -208,14 +279,20 @@ function App() {
           }
         });
         
-        // Play sound if enabled and message is not from current user
-        if (soundEnabled && data.senderType !== 'operator' && audioRef) {
-          audioRef.play().catch((err) => {
-            console.warn('Failed to play sound:', err);
-            if (err.name === 'NotAllowedError') {
-              setSoundBlocked(true);
-            }
-          });
+        // Play sound if enabled, unlocked, and message is from visitor (throttled)
+        if (soundEnabled && soundUnlocked && data.senderType === 'visitor' && audioRef) {
+          const now = Date.now();
+          if (now - lastSoundPlayTime.current > 500) {
+            // Throttle: only play if 500ms passed since last play
+            lastSoundPlayTime.current = now;
+            audioRef.play().catch((err) => {
+              console.warn('[SOUND] Failed to play sound:', err);
+              if (err.name === 'NotAllowedError') {
+                setSoundBlocked(true);
+                setSoundUnlocked(false);
+              }
+            });
+          }
         }
       });
 
@@ -238,6 +315,7 @@ function App() {
 
   const handleSelectConversation = async (conversationId: string) => {
     setSelectedConversation(conversationId);
+    setShowScrollButton(false);
 
     if (!operatorToken) return;
 
@@ -282,6 +360,9 @@ function App() {
               [conversationId]: combined,
             };
           });
+          
+          // Scroll to bottom after loading history
+          setTimeout(() => scrollToBottom('auto'), 100);
         }
       } catch (err) {
         console.error('Failed to fetch messages:', err);
@@ -307,6 +388,9 @@ function App() {
           ...prev,
           [conversationId]: data,
         }));
+        
+        // Scroll to bottom after loading history
+        setTimeout(() => scrollToBottom('auto'), 100);
       } catch (err: any) {
         setError(err.message || 'Failed to load messages');
       }
@@ -342,6 +426,9 @@ function App() {
     });
 
     setMessageInput('');
+    
+    // Scroll to bottom after sending message
+    setTimeout(() => scrollToBottom('smooth'), 100);
   };
 
   const handleLogout = () => {
@@ -425,14 +512,15 @@ function App() {
                   />
                   Sound
                 </label>
-                {soundBlocked && (
+                {soundBlocked && !soundUnlocked && (
                   <button
                     onClick={() => {
                       if (audioRef) {
                         audioRef.play().then(() => {
                           setSoundBlocked(false);
+                          setSoundUnlocked(true);
                         }).catch((err) => {
-                          console.warn('Failed to enable sound:', err);
+                          console.warn('[SOUND] Failed to enable sound:', err);
                         });
                       }
                     }}

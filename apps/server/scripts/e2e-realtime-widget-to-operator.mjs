@@ -208,8 +208,38 @@ async function runE2ETest() {
     await operatorPromise;
     console.log('✓ TEST PASSED: Widget -> Operator realtime delivery works');
 
-    // Verify messages endpoint returns the message
-    console.log('\n[VERIFY] Checking messages endpoint returns the message...');
+    // Send second message to verify UI state updates
+    console.log('\n[TEST] Sending second message to verify UI state updates...');
+    const widgetMessageText2 = `widget-to-operator-2-${timestamp}`;
+    const widgetClientMessageId2 = `widget-2-${timestamp}-${Math.random().toString(36).substr(2, 9)}`;
+
+    let operatorReceived2 = false;
+    const operatorPromise2 = new Promise((resolve, reject) => {
+      operatorSocket.on('message:new', (data) => {
+        if (data.conversationId === conversationId && data.text === widgetMessageText2) {
+          console.log(`✓ Operator received second message:new`);
+          operatorReceived2 = true;
+          resolve(true);
+        }
+      });
+      setTimeout(() => {
+        if (!operatorReceived2) {
+          reject(new Error('Operator did not receive second message:new within 3 seconds'));
+        }
+      }, 3000);
+    });
+
+    widgetSocket.emit('message:send', {
+      conversationId,
+      text: widgetMessageText2,
+      clientMessageId: widgetClientMessageId2,
+    });
+
+    await operatorPromise2;
+    console.log('✓ TEST PASSED: Second message delivered, UI state should update');
+
+    // Verify messages endpoint returns both messages
+    console.log('\n[VERIFY] Checking messages endpoint returns both messages...');
     const messagesResp = await fetch(
       `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
       {
@@ -224,13 +254,17 @@ async function runE2ETest() {
     }
 
     const messagesData = await messagesResp.json();
-    const foundMessage = messagesData.find((m) => m.text === widgetMessageText);
+    const foundMessage1 = messagesData.find((m) => m.text === widgetMessageText);
+    const foundMessage2 = messagesData.find((m) => m.text === widgetMessageText2);
     
-    if (!foundMessage) {
-      throw new Error('Message not found in messages endpoint response');
+    if (!foundMessage1) {
+      throw new Error('First message not found in messages endpoint response');
+    }
+    if (!foundMessage2) {
+      throw new Error('Second message not found in messages endpoint response');
     }
 
-    console.log(`✓ Messages endpoint returned the message: ${foundMessage.serverMessageId || foundMessage.id}`);
+    console.log(`✓ Messages endpoint returned both messages: ${foundMessage1.serverMessageId || foundMessage1.id}, ${foundMessage2.serverMessageId || foundMessage2.id}`);
 
     // Cleanup
     widgetSocket.disconnect();
