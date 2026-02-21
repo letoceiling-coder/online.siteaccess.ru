@@ -90,14 +90,20 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Проверка дубликата
-    const existing = await this.prisma.message.findUnique({
-      where: { clientMessageId },
-      select: {
-        id: true,
-        createdAt: true,
-      },
-    });
+    // Проверка дубликата (skip if clientMessageId column doesn't exist in DB)
+    let existing = null;
+    try {
+      existing = await this.prisma.message.findFirst({
+        where: { clientMessageId },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      // Column might not exist, skip duplicate check
+      this.logger.warn(`Duplicate check skipped: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
 
     if (existing) {
       client.emit('message:ack', {
