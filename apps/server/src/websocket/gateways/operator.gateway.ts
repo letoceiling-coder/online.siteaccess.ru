@@ -93,7 +93,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
         senderType: 'operator',
         senderId: userId,
         text: text.trim(), // Prisma maps 'text' field to 'content' column via @map("content")
-        messageType: 'text',
+        // messageType has default 'text' in DB, not in Prisma schema
         // Skip clientMessageId - column doesn't exist in DB
       },
     });

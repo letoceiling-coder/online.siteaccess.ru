@@ -123,7 +123,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
         senderType: 'visitor',
         senderId: null,
         text: trimmedText, // Prisma maps 'text' field to 'content' column via @map("content")
-        messageType: 'text',
+        // messageType has default 'text' in DB, not in Prisma schema
       },
     });
     
