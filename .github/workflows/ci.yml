@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Validate Prisma schema
+        run: pnpm -C apps/server prisma validate
+
+      - name: Smoke test - Health
+        run: pnpm -C apps/server run smoke:health
+        env:
+          API_URL: https://online.siteaccess.ru
+
+      - name: Smoke test - Operator login
+        run: pnpm -C apps/server run smoke:operator
+        env:
+          API_URL: https://online.siteaccess.ru
