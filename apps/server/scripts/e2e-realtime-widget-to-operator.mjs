@@ -224,7 +224,7 @@ async function runE2ETest() {
     }
 
     const messagesData = await messagesResp.json();
-    const foundMessage = messagesData.find((m: any) => m.text === widgetMessageText);
+    const foundMessage = messagesData.find((m) => m.text === widgetMessageText);
     
     if (!foundMessage) {
       throw new Error('Message not found in messages endpoint response');
