@@ -260,8 +260,13 @@ export class ProjectsService {
     }
 
     // Check if already a member
-    // Using bracket notation because Prisma Client generates models dynamically
-    const existing = await (this.prisma as any)['channelMember'].findUnique({
+    // Access channelMember via Prisma Client (generated dynamically)
+    const channelMemberDelegate = (this.prisma as any).channelMember;
+    if (!channelMemberDelegate) {
+      throw new Error('Prisma Client channelMember delegate not found. Run: pnpm prisma generate');
+    }
+
+    const existing = await channelMemberDelegate.findUnique({
       where: {
         channelId_userId: {
           channelId: id,
@@ -279,7 +284,7 @@ export class ProjectsService {
     }
 
     // Add as operator
-    await (this.prisma as any)['channelMember'].create({
+    await channelMemberDelegate.create({
       data: {
         channelId: id,
         userId: user.id,
