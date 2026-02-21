@@ -93,6 +93,10 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Проверка дубликата
     const existing = await this.prisma.message.findUnique({
       where: { clientMessageId },
+      select: {
+        id: true,
+        createdAt: true,
+      },
     });
 
     if (existing) {
