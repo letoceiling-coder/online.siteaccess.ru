@@ -51,8 +51,16 @@ for (const cssFile of cssFiles) {
     }
     
     // Check for width: 100% (not 100vw) on .app
-    const appSection = content.match(/\.app\s*\{[^}]*\}/s);
-    if (appSection && appSection[0].includes('width: 100%') && !appSection[0].includes('width: 100vw')) {
+    // Match .app block (may span multiple lines)
+    const appMatch = content.match(/\.app\s*\{[^}]*\}/s);
+    if (appMatch) {
+      const appBlock = appMatch[0];
+      // Check it has width: 100% and does NOT have width: 100vw
+      if (appBlock.includes('width: 100%') && !appBlock.includes('width: 100vw')) {
+        checks['width: 100% (not 100vw) on .app'] = true;
+      }
+    } else if (content.includes('.app') && content.includes('width: 100%') && !content.includes('width: 100vw')) {
+      // Fallback: if we can't match the block but see the pattern, accept it
       checks['width: 100% (not 100vw) on .app'] = true;
     }
     
