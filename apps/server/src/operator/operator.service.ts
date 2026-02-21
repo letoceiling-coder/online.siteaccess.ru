@@ -69,9 +69,22 @@ export class OperatorService {
       const normalizedEmail = email.toLowerCase().trim();
       this.logger.log(`[TRACE] Operator login START: email=${normalizedEmail}, channelId=${channelId}`);
 
-      const user = await this.prisma.user.findUnique({
+      // Try normalized first, then fallback to case-insensitive search for existing users
+      let user = await this.prisma.user.findUnique({
         where: { email: normalizedEmail },
       });
+
+      // Fallback: case-insensitive search for existing users with mixed casing
+      if (!user) {
+        user = await this.prisma.user.findFirst({
+          where: {
+            email: {
+              equals: normalizedEmail,
+              mode: 'insensitive',
+            },
+          },
+        });
+      }
 
       this.logger.log(`[TRACE] User lookup: found=${!!user}, userId=${user?.id || 'N/A'}`);
 

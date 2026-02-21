@@ -76,9 +76,22 @@ export class AuthService {
       // Normalize email to lowercase for case-insensitive lookup
       const normalizedEmail = dto.email.toLowerCase().trim();
 
-      const user = await this.prisma.user.findUnique({
+      // Try normalized first, then fallback to case-insensitive search for existing users
+      let user = await this.prisma.user.findUnique({
         where: { email: normalizedEmail },
       });
+
+      // Fallback: case-insensitive search for existing users with mixed casing
+      if (!user) {
+        user = await this.prisma.user.findFirst({
+          where: {
+            email: {
+              equals: normalizedEmail,
+              mode: 'insensitive',
+            },
+          },
+        });
+      }
 
       if (!user) {
         throw new UnauthorizedException('Invalid credentials');
