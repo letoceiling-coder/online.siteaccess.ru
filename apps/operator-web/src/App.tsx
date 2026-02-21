@@ -567,6 +567,7 @@ function App() {
                       </div>
                     </div>
                   ))}
+ <div ref={endRef} />
                 </div>
                 <div className="chat-input-container">
                   <input
