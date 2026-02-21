@@ -17,7 +17,8 @@
     "smoke:operator": "node scripts/smoke-operator-login.mjs",
     "smoke:operator:conversations": "node scripts/smoke-operator-conversations.mjs",
     "smoke:ws:widget": "node scripts/smoke-ws-widget-auth.mjs",
-    "e2e:chat:persist": "node scripts/e2e-chat-persist.mjs"
+    "e2e:chat:persist": "node scripts/e2e-chat-persist.mjs",
+    "smoke:ws:realtime": "node scripts/e2e-realtime-message.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
