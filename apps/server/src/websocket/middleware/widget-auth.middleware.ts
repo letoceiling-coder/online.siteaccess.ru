@@ -1,5 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Socket } from 'socket.io';
 import { WsException } from '@nestjs/websockets';
 
@@ -7,7 +8,10 @@ import { WsException } from '@nestjs/websockets';
 export class WidgetAuthGuard implements CanActivate {
   private readonly logger = new Logger(WidgetAuthGuard.name);
 
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private config: ConfigService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
@@ -48,7 +52,9 @@ export class WidgetAuthGuard implements CanActivate {
     this.logger.log(`[TRACE] Token prefix: ${tokenPrefix}...`);
 
     try {
-      const payload = this.jwtService.verify(token);
+      const payload = this.jwtService.verify(token, {
+        secret: this.config.get('JWT_SECRET') || 'dev-secret',
+      });
       this.logger.log(`[TRACE] Token decoded: channelId=${payload.channelId}, conversationId=${payload.conversationId}, visitorId=${payload.visitorId}`);
 
       // Set client data
