@@ -139,19 +139,37 @@ class SiteAccessChatWidget {
       .chat-messages {
         flex: 1;
         overflow-y: auto;
-        padding: 15px;
+        overflow-x: hidden;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .message {
-        margin-bottom: 10px;
-        padding: 8px;
-        border-radius: 4px;
+        max-width: 75%;
+        padding: 10px 14px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        box-sizing: border-box;
       }
       .message.visitor {
-        background: #e3f2fd;
-        text-align: right;
+        align-self: flex-start;
+        background: #f1f3f5;
+        color: #212529;
       }
       .message.operator {
-        background: #f5f5f5;
+        align-self: flex-end;
+        background: #4c6ef5;
+        color: white;
+      }
+      .message a {
+        word-break: break-all;
       }
       .chat-input-container {
         padding: 15px;
