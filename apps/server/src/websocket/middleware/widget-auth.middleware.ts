@@ -1,28 +1,75 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Socket } from 'socket.io';
+import { WsException } from '@nestjs/websockets';
 
 @Injectable()
 export class WidgetAuthGuard implements CanActivate {
+  private readonly logger = new Logger(WidgetAuthGuard.name);
+
   constructor(private jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
-    const token = client.handshake.auth?.token || client.handshake.query?.token;
+
+    // TRACE: Log available token sources
+    const authKeys = client.handshake.auth ? Object.keys(client.handshake.auth) : [];
+    const queryKeys = client.handshake.query ? Object.keys(client.handshake.query) : [];
+    const authHeader = client.handshake.headers?.authorization;
+
+    this.logger.log(`[TRACE] Auth attempt: authKeys=[${authKeys.join(',')}], queryKeys=[${queryKeys.join(',')}], hasAuthHeader=${!!authHeader}`);
+
+    // Try multiple token sources
+    let token: string | undefined;
+
+    // 1) handshake.auth.token
+    if (client.handshake.auth?.token && typeof client.handshake.auth.token === 'string') {
+      token = client.handshake.auth.token;
+      this.logger.log(`[TRACE] Token found in handshake.auth.token`);
+    }
+    // 2) handshake.query.token
+    else if (client.handshake.query?.token && typeof client.handshake.query.token === 'string') {
+      token = client.handshake.query.token;
+      this.logger.log(`[TRACE] Token found in handshake.query.token`);
+    }
+    // 3) Authorization header (Bearer token)
+    else if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+      this.logger.log(`[TRACE] Token found in Authorization header`);
+    }
 
     if (!token || typeof token !== 'string') {
-      throw new UnauthorizedException('Token required');
+      this.logger.warn(`[TRACE] Token not found in any source`);
+      throw new WsException('UNAUTHORIZED');
     }
+
+    // Log token prefix only (no secrets)
+    const tokenPrefix = token.substring(0, 10);
+    this.logger.log(`[TRACE] Token prefix: ${tokenPrefix}...`);
 
     try {
       const payload = this.jwtService.verify(token);
+      this.logger.log(`[TRACE] Token decoded: channelId=${payload.channelId}, conversationId=${payload.conversationId}, visitorId=${payload.visitorId}`);
+
+      // Set client data
       client.data.channelId = payload.channelId;
       client.data.visitorId = payload.visitorId;
       client.data.conversationId = payload.conversationId;
       client.data.externalId = payload.externalId;
+
+      // Join rooms immediately
+      if (payload.channelId) {
+        client.join(`channel:${payload.channelId}`);
+      }
+      if (payload.conversationId) {
+        client.join(`conversation:${payload.conversationId}`);
+      }
+
+      this.logger.log(`[TRACE] Auth SUCCESS: clientId=${client.id}, channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
       return true;
-    } catch {
-      throw new UnauthorizedException('Invalid token');
+    } catch (error) {
+      this.logger.warn(`[TRACE] Token verification failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      throw new WsException('UNAUTHORIZED');
     }
   }
 }

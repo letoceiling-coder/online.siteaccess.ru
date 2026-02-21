@@ -31,14 +31,17 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   async handleConnection(client: Socket) {
+    // Auth guard runs before this, so data should be set
     const { channelId, conversationId } = client.data;
-    if (channelId && conversationId) {
-      client.join(`channel:${channelId}`);
-      client.join(`conversation:${conversationId}`);
-      this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
-    } else {
-      this.logger.warn(`Widget connected but missing data: ${client.id}, channelId: ${channelId}, conversationId: ${conversationId}`);
+    
+    if (!channelId || !conversationId) {
+      this.logger.error(`Widget connected but missing auth data: ${client.id}, channelId: ${channelId}, conversationId: ${conversationId} - disconnecting`);
+      client.disconnect();
+      return;
     }
+
+    // Rooms already joined in guard, just log
+    this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
   }
 
   async handleDisconnect(client: Socket) {
