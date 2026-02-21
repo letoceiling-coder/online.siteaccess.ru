@@ -147,6 +147,13 @@ With custom API URL:
 API_URL=http://localhost:3100 pnpm -C apps/server run smoke:health
 ```
 
+With real operator credentials:
+```bash
+OP_EMAIL=user@example.com OP_PASSWORD=password OP_CHANNEL_ID=channel-uuid pnpm -C apps/server run smoke:operator
+```
+
+**Note**: `smoke:operator` requires real credentials via environment variables. If not provided, it will skip with exit 0. With real credentials, it expects 200 (success) and exits with 1 on any other status (including 401/400).
+
 ### Adding New Smoke Tests
 
 1. Create script in `apps/server/scripts/smoke-*.mjs`

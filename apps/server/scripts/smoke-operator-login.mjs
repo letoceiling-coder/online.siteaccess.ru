@@ -7,10 +7,10 @@
 
 const API_URL = process.env.API_URL || 'https://online.siteaccess.ru';
 
-// Test credentials (from user request)
-const OWNER_EMAIL = 'dsc-23@yandex.RU';
-const OWNER_PASSWORD = '123123123';
-const CHANNEL_ID = '643d6654-ad02-492e-b490-74e2066cf330';
+// Read credentials from environment (no hardcoded secrets)
+const OP_EMAIL = process.env.OP_EMAIL;
+const OP_PASSWORD = process.env.OP_PASSWORD;
+const OP_CHANNEL_ID = process.env.OP_CHANNEL_ID;
 
 function truncateToken(token) {
   if (!token) return 'null';
@@ -42,64 +42,30 @@ async function makeRequest(url, options = {}) {
 async function main() {
   console.log('=== Operator Login Smoke Test ===\n');
 
-  // Step 1: Owner login to verify API is alive
-  console.log('Step 1: Owner login...');
-  const ownerLogin = await makeRequest(`${API_URL}/api/auth/login`, {
-    method: 'POST',
-    body: JSON.stringify({
-      email: OWNER_EMAIL,
-      password: OWNER_PASSWORD,
-    }),
-  });
-  console.log(`Status: ${ownerLogin.status}`);
-  if (ownerLogin.status === 200 || ownerLogin.status === 201) {
-    console.log(`✅ Owner login successful (status ${ownerLogin.status})`);
-    console.log(`Token: ${truncateToken(ownerLogin.body.accessToken)}`);
-  } else {
-    console.log(`❌ Owner login failed: ${JSON.stringify(ownerLogin.body)}`);
-    if (ownerLogin.status >= 500) {
-      console.error('ERROR: Owner login returned 500+ status');
-      process.exit(1);
-    }
+  // Check if credentials provided
+  if (!OP_EMAIL || !OP_PASSWORD || !OP_CHANNEL_ID) {
+    console.log('SKIPPED: No credentials provided (OP_EMAIL, OP_PASSWORD, OP_CHANNEL_ID)');
+    console.log('To run with real credentials:');
+    console.log('  OP_EMAIL=... OP_PASSWORD=... OP_CHANNEL_ID=... pnpm -C apps/server smoke:operator');
+    process.exit(0);
   }
-  console.log('');
 
-  // Step 2: Get projects list (optional, to verify channelId)
-  console.log('Step 2: Get projects list...');
-  if (ownerLogin.status === 200 && ownerLogin.body.accessToken) {
-    const projects = await makeRequest(`${API_URL}/api/projects`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${ownerLogin.body.accessToken}`,
-      },
-    });
-    console.log(`Status: ${projects.status}`);
-    if (projects.status === 200 && Array.isArray(projects.body)) {
-      console.log(`✅ Found ${projects.body.length} project(s)`);
-      const channel = projects.body.find((p) => p.id === CHANNEL_ID);
-      if (channel) {
-        console.log(`✅ Channel ${CHANNEL_ID} found: ${channel.name}`);
-      } else {
-        console.log(`⚠️  Channel ${CHANNEL_ID} not found in projects list`);
-      }
-    } else {
-      console.log(`⚠️  Could not fetch projects: ${JSON.stringify(projects.body)}`);
-    }
-  }
-  console.log('');
-
-  // Step 3: Operator login
-  console.log('Step 3: Operator login...');
+  // Step 1: Operator login (main test)
+  console.log('Step 1: Operator login...');
   const operatorLogin = await makeRequest(`${API_URL}/api/operator/auth/login`, {
     method: 'POST',
     body: JSON.stringify({
-      email: OWNER_EMAIL,
-      password: OWNER_PASSWORD,
-      channelId: CHANNEL_ID,
+      email: OP_EMAIL,
+      password: OP_PASSWORD,
+      channelId: OP_CHANNEL_ID,
     }),
   });
   console.log(`Status: ${operatorLogin.status}`);
-  console.log(`Response: ${JSON.stringify(operatorLogin.body, null, 2).replace(/"(token|accessToken|operatorAccessToken)":"[^"]+"/g, '"$1":"***"')}`);
+  const safeResponse = JSON.stringify(operatorLogin.body, null, 2).replace(
+    /"(token|accessToken|operatorAccessToken|password)":"[^"]+"/g,
+    '"$1":"***"'
+  );
+  console.log(`Response: ${safeResponse}`);
 
   if (operatorLogin.status === 200) {
     console.log(`✅ Operator login successful`);
@@ -108,18 +74,19 @@ async function main() {
     }
     console.log('\n✅✅✅ ALL TESTS PASSED ✅✅✅');
     process.exit(0);
-  } else if (operatorLogin.status === 401) {
-    console.log(`⚠️  Operator login returned 401 (unauthorized) - this is acceptable for invalid credentials`);
-    console.log('\n⚠️  Test completed with 401 (expected for invalid credentials)');
-    process.exit(0);
   } else if (operatorLogin.status >= 500) {
     console.error(`❌❌❌ CRITICAL: Operator login returned ${operatorLogin.status} (Internal Server Error)`);
     console.error('This must be fixed!');
     process.exit(1);
+  } else if (operatorLogin.status === 401 || operatorLogin.status === 400) {
+    console.error(`❌ Operator login failed with ${operatorLogin.status}`);
+    console.error('For real credentials, this should return 200. Check:');
+    console.error('  - Email/password correct');
+    console.error('  - ChannelId exists and user is member');
+    process.exit(1);
   } else {
-    console.log(`⚠️  Operator login returned ${operatorLogin.status}`);
-    console.log('\n⚠️  Test completed with non-200/401 status');
-    process.exit(0);
+    console.error(`❌ Unexpected status: ${operatorLogin.status}`);
+    process.exit(1);
   }
 }
 

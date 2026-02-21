@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Param, Body, UseGuards, Request, Query }
 import { AuthGuard } from '@nestjs/passport';
 import { OperatorService } from './operator.service';
 import { AddOperatorDto } from './dto/add-operator.dto';
+import { OperatorLoginDto } from './dto/operator-login.dto';
 
 @Controller('api/operator')
 export class OperatorController {
@@ -9,7 +10,7 @@ export class OperatorController {
 
   @Get('conversations')
   @UseGuards(AuthGuard('operator-jwt'))
-  async getConversations(@Request() req: any, @Query('channelId') channelId: string) {
+  async getConversations(@Query('channelId') channelId: string, @Request() req: any) {
     // channelId from token should match query
     if (req.user.channelId !== channelId) {
       throw new Error('Channel ID mismatch');
@@ -20,9 +21,9 @@ export class OperatorController {
   @Get('messages')
   @UseGuards(AuthGuard('operator-jwt'))
   async getMessages(
-    @Request() req: any,
     @Query('conversationId') conversationId: string,
     @Query('limit') limit?: string,
+    @Request() req: any,
   ) {
     return this.operatorService.getMessages(conversationId, limit ? parseInt(limit) : 50);
   }
@@ -33,7 +34,7 @@ export class OperatorAuthController {
   constructor(private operatorService: OperatorService) {}
 
   @Post('login')
-  async login(@Body() dto: { email: string; password: string; channelId: string }) {
+  async login(@Body() dto: OperatorLoginDto) {
     return this.operatorService.login(dto.email, dto.password, dto.channelId);
   }
 }
