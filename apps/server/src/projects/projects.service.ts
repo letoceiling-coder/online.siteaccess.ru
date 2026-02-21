@@ -204,7 +204,7 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    const members = await (this.prisma as any).channelMember.findMany({
+    const members = await this.prisma.channelMember.findMany({
       where: { channelId: id },
       include: {
         user: {
