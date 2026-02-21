@@ -114,22 +114,22 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Создание сообщения (only fields that exist in DB)
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId,
-        senderType: 'visitor',
-        text: text.trim(),
-        // Skip: clientMessageId, ciphertext, encryptionVersion - columns don't exist in DB
-      },
-      select: {
-        id: true,
-        conversationId: true,
-        senderType: true,
-        text: true,
-        createdAt: true,
-      },
-    });
+    // Создание сообщения (use raw SQL to avoid Prisma schema mismatch)
+    const messageId = require('uuid').v4();
+    const trimmedText = text.trim();
+    
+    await this.prisma.$executeRaw`
+      INSERT INTO messages (id, "conversationId", "senderType", content, "createdAt", "updatedAt")
+      VALUES (${messageId}, ${conversationId}, 'visitor', ${trimmedText}, NOW(), NOW())
+    `;
+    
+    const message = {
+      id: messageId,
+      conversationId,
+      senderType: 'visitor',
+      text: trimmedText,
+      createdAt: new Date(),
+    };
 
     // ACK отправителю
     client.emit('message:ack', {
