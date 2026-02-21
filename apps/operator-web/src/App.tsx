@@ -558,7 +558,17 @@ function App() {
                 <div className="chat-header">
                   <h3>Chat</h3>
                 </div>
-                <div className="messages-container">
+                <div 
+                  className="messages-container"
+                  ref={messagesWrapRef}
+                  onScroll={() => {
+                    if (isNearBottom()) {
+                      setShowScrollButton(false);
+                    } else {
+                      setShowScrollButton(true);
+                    }
+                  }}
+                >
                   {messages.map((msg) => (
                     <div key={msg.serverMessageId} className={`message ${msg.senderType}`}>
                       <div className="message-text">{msg.text}</div>
@@ -567,7 +577,30 @@ function App() {
                       </div>
                     </div>
                   ))}
- <div ref={endRef} />
+                  <div ref={endRef} />
+                  {showScrollButton && (
+                    <button
+                      onClick={() => {
+                        scrollToBottom(true);
+                        setShowScrollButton(false);
+                      }}
+                      style={{
+                        position: 'sticky',
+                        bottom: '10px',
+                        alignSelf: 'center',
+                        padding: '8px 16px',
+                        background: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        zIndex: 10,
+                      }}
+                    >
+                      New messages / Scroll to bottom
+                    </button>
+                  )}
                 </div>
                 <div className="chat-input-container">
                   <input
