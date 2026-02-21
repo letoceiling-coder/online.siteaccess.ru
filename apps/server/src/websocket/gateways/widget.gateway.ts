@@ -28,20 +28,42 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private prisma: PrismaService,
     @Inject('REDIS_CLIENT') private redis: Redis,
+    private jwtService: JwtService,
+    private config: ConfigService,
   ) {}
 
   async handleConnection(client: Socket) {
-    // Auth guard runs before this, so data should be set
-    const { channelId, conversationId } = client.data;
+    // Guard applies to messages, not connection - need to auth here
+    const token = client.handshake.auth?.token || client.handshake.query?.token;
     
-    if (!channelId || !conversationId) {
-      this.logger.error(`Widget connected but missing auth data: ${client.id}, channelId: ${channelId}, conversationId: ${conversationId} - disconnecting`);
+    this.logger.log(`[TRACE] handleConnection: clientId=${client.id}, hasToken=${!!token}, authKeys=[${Object.keys(client.handshake.auth || {}).join(',')}], queryKeys=[${Object.keys(client.handshake.query || {}).join(',')}]`);
+    
+    if (!token || typeof token !== 'string') {
+      this.logger.warn(`Widget connection rejected: no token, clientId=${client.id}`);
       client.disconnect();
       return;
     }
 
-    // Rooms already joined in guard, just log
-    this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.config.get('JWT_SECRET') || 'dev-secret',
+      });
+      
+      this.logger.log(`[TRACE] Token verified: channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
+      
+      client.data.channelId = payload.channelId;
+      client.data.visitorId = payload.visitorId;
+      client.data.conversationId = payload.conversationId;
+      client.data.externalId = payload.externalId;
+
+      client.join(`channel:${payload.channelId}`);
+      client.join(`conversation:${payload.conversationId}`);
+
+      this.logger.log(`Widget connected: ${client.id}, channel: ${payload.channelId}, conversation: ${payload.conversationId}`);
+    } catch (error) {
+      this.logger.warn(`Widget connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
+      client.disconnect();
+    }
   }
 
   async handleDisconnect(client: Socket) {
