@@ -51,7 +51,8 @@ for (const cssFile of cssFiles) {
     }
     
     // Check for width: 100% (not 100vw) on .app
-    if (content.includes('.app') && content.includes('width: 100%') && !content.match(/\.app[^{]*\{[^}]*width:\s*100vw/)) {
+    const appSection = content.match(/\.app\s*\{[^}]*\}/s);
+    if (appSection && appSection[0].includes('width: 100%') && !appSection[0].includes('width: 100vw')) {
       checks['width: 100% (not 100vw) on .app'] = true;
     }
     
