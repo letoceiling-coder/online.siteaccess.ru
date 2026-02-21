@@ -86,14 +86,15 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       return;
     }
 
-    // Create message in DB
+    // Create message in DB (using Prisma, only fields that exist in DB)
     const message = await this.prisma.message.create({
       data: {
         conversationId,
         senderType: 'operator',
         senderId: userId,
-        text: text.trim(),
-        clientMessageId,
+        text: text.trim(), // Prisma maps 'text' field to 'content' column via @map("content")
+        messageType: 'text',
+        // Skip clientMessageId - column doesn't exist in DB
       },
     });
 
