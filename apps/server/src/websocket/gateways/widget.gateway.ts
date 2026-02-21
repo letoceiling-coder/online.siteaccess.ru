@@ -143,6 +143,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     // Emit to both widget and operator namespaces for realtime delivery
+    const { channelId } = client.data;
     const messagePayload = {
       serverMessageId: message.id,
       conversationId,
@@ -154,14 +155,18 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Emit to widget namespace (other widgets in same conversation)
     this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
 
-    // Emit to operator namespace (operators watching this conversation)
-    // Access main server to get operator namespace
+    // Emit to operator namespace
+    // CRITICAL: Emit to BOTH channel room (all operators) AND conversation room (joined operators)
+    // Operators always join channel:{channelId} on connect, but only join conversation:{conversationId} when they open it
     const mainServer = (this.server as any).server;
     if (mainServer) {
       const operatorNamespace = mainServer.of('/operator');
-      if (operatorNamespace) {
+      if (operatorNamespace && channelId) {
+        // Emit to channel room (MANDATORY - all operators in channel receive this)
+        operatorNamespace.to(`channel:${channelId}`).emit('message:new', messagePayload);
+        // Also emit to conversation room (for operators who have explicitly joined)
         operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
-        this.logger.log(`[REALTIME] Emitted message:new to operator namespace for conversation:${conversationId}`);
+        this.logger.log(`[REALTIME] Emitted message:new to operator namespace: channel:${channelId} and conversation:${conversationId}`);
       }
     }
   }

@@ -124,17 +124,39 @@ function App() {
       });
 
       ws.on('message:new', (data: any) => {
+        console.log('[REALTIME] Received message:new:', data);
+        
+        // If this conversation is currently open, add message to messages list
         if (data.conversationId === selectedConversation) {
           setMessages((prev) => [...prev, data]);
         }
-        // Update conversation list
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.conversationId === data.conversationId
-              ? { ...conv, lastMessageText: data.text, updatedAt: new Date().toISOString() }
-              : conv
-          )
-        );
+        
+        // Always update conversation list (for badge/notification)
+        setConversations((prev) => {
+          const existingIndex = prev.findIndex((conv) => conv.conversationId === data.conversationId);
+          
+          if (existingIndex >= 0) {
+            // Update existing conversation
+            return prev.map((conv, idx) =>
+              idx === existingIndex
+                ? { ...conv, lastMessageText: data.text, updatedAt: new Date().toISOString() }
+                : conv
+            );
+          } else {
+            // New conversation - add it to the list (might be a new visitor)
+            // Note: We don't have full conversation data, so we'll use what we have
+            // The next conversations fetch will get full data
+            return [
+              {
+                conversationId: data.conversationId,
+                visitorExternalId: 'New visitor',
+                updatedAt: new Date().toISOString(),
+                lastMessageText: data.text,
+              },
+              ...prev,
+            ];
+          }
+        });
       });
 
       ws.on('presence:update', (data: any) => {
