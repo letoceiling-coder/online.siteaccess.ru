@@ -89,7 +89,7 @@ model Message {
   conversationId String
   senderType     String   // "visitor" | "operator"
   senderId       String?  // operator userId if senderType == "operator"
-  text           String?
+  text           String?  @map("content")
   ciphertext     String?  // зашифрованный текст (для encryptionMode: server/e2ee)
   encryptionVersion Int   @default(0) // версия алгоритма шифрования
   clientMessageId String? @unique // для дедупликации от виджета

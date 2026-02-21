@@ -51,7 +51,7 @@ function App() {
 
   // Initialize audio element
   useEffect(() => {
-    const audio = new Audio('/sounds/new-message.mp3');
+    const audio = new Audio('/sounds/new-message.wav');
     audio.preload = 'auto';
     setAudioRef(audio);
     

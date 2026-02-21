@@ -44,6 +44,13 @@ async function bootstrap() {
   // dist/ -> ../ -> apps/server/ -> ../ -> apps/ -> portal/dist
   const portalDistPath = join(__dirname, '..', '..', 'portal', 'dist');
   
+  // Serve sounds directory BEFORE portal static (to avoid SPA fallback)
+  const soundsPath = join(__dirname, '..', '..', 'operator-web', 'public', 'sounds');
+  app.useStaticAssets(soundsPath, {
+    prefix: '/sounds',
+    index: false,
+  });
+  
   // Serve portal static assets (CSS, JS, images) at root
   // This must NOT serve index.html automatically
   app.useStaticAssets(portalDistPath, {
@@ -52,7 +59,7 @@ async function bootstrap() {
   });
 
   // SPA fallback: serve portal index.html ONLY for GET requests
-  // that don't match /api, /widget, /operator, /demo, /health
+  // that don't match /api, /widget, /operator, /demo, /health, /sounds
   // and are not already handled by static files
   // Use express instance directly to avoid NestJS route registration issues
   const expressApp = app.getHttpAdapter().getInstance();
@@ -65,7 +72,8 @@ async function bootstrap() {
       path.startsWith('/widget') ||
       path.startsWith('/operator') ||
       path.startsWith('/demo') ||
-      path.startsWith('/health')
+      path.startsWith('/health') ||
+      path.startsWith('/sounds')
     ) {
       return next();
     }
