@@ -66,30 +66,18 @@ export class OperatorService {
   async login(email: string, password: string, channelId: string) {
     try {
       // TRACE: Start login attempt
-      const normalizedEmail = email.toLowerCase().trim();
-      this.logger.log(`[TRACE] Operator login START: email=${normalizedEmail}, channelId=${channelId}`);
+      const emailNormalized = email.trim().toLowerCase();
+      this.logger.log(`[TRACE] Operator login START: email=${emailNormalized}, channelId=${channelId}`);
 
-      // Try normalized first, then fallback to case-insensitive search for existing users
-      let user = await this.prisma.user.findUnique({
-        where: { email: normalizedEmail },
+      // Strict lowercase lookup (no fallback)
+      const user = await this.prisma.user.findUnique({
+        where: { email: emailNormalized },
       });
-
-      // Fallback: case-insensitive search for existing users with mixed casing
-      if (!user) {
-        user = await this.prisma.user.findFirst({
-          where: {
-            email: {
-              equals: normalizedEmail,
-              mode: 'insensitive',
-            },
-          },
-        });
-      }
 
       this.logger.log(`[TRACE] User lookup: found=${!!user}, userId=${user?.id || 'N/A'}`);
 
       if (!user) {
-        this.logger.warn(`[TRACE] Operator login FAILED: user not found for email=${normalizedEmail}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: user not found for email=${emailNormalized}`);
         throw new UnauthorizedException('Invalid credentials');
       }
 

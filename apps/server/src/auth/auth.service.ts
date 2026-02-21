@@ -17,11 +17,11 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     try {
-      // Normalize email to lowercase for consistent storage
-      const normalizedEmail = dto.email.toLowerCase().trim();
+      // Enforce strict lowercase email policy
+      const emailNormalized = dto.email.trim().toLowerCase();
 
       const existingUser = await this.prisma.user.findUnique({
-        where: { email: normalizedEmail },
+        where: { email: emailNormalized },
       });
 
       if (existingUser) {
@@ -32,7 +32,7 @@ export class AuthService {
 
       const user = await this.prisma.user.create({
         data: {
-          email: normalizedEmail, // Store normalized email
+          email: emailNormalized, // Store lowercase only
           passwordHash,
         },
         select: {
@@ -73,25 +73,13 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     try {
-      // Normalize email to lowercase for case-insensitive lookup
-      const normalizedEmail = dto.email.toLowerCase().trim();
+      // Enforce strict lowercase email policy
+      const emailNormalized = dto.email.trim().toLowerCase();
 
-      // Try normalized first, then fallback to case-insensitive search for existing users
-      let user = await this.prisma.user.findUnique({
-        where: { email: normalizedEmail },
+      // Strict lowercase lookup (no fallback)
+      const user = await this.prisma.user.findUnique({
+        where: { email: emailNormalized },
       });
-
-      // Fallback: case-insensitive search for existing users with mixed casing
-      if (!user) {
-        user = await this.prisma.user.findFirst({
-          where: {
-            email: {
-              equals: normalizedEmail,
-              mode: 'insensitive',
-            },
-          },
-        });
-      }
 
       if (!user) {
         throw new UnauthorizedException('Invalid credentials');
