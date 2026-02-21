@@ -17,8 +17,11 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     try {
+      // Normalize email to lowercase for consistent storage
+      const normalizedEmail = dto.email.toLowerCase().trim();
+
       const existingUser = await this.prisma.user.findUnique({
-        where: { email: dto.email },
+        where: { email: normalizedEmail },
       });
 
       if (existingUser) {
@@ -29,7 +32,7 @@ export class AuthService {
 
       const user = await this.prisma.user.create({
         data: {
-          email: dto.email,
+          email: normalizedEmail, // Store normalized email
           passwordHash,
         },
         select: {
@@ -70,8 +73,11 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     try {
+      // Normalize email to lowercase for case-insensitive lookup
+      const normalizedEmail = dto.email.toLowerCase().trim();
+
       const user = await this.prisma.user.findUnique({
-        where: { email: dto.email },
+        where: { email: normalizedEmail },
       });
 
       if (!user) {

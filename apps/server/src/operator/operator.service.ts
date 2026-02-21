@@ -65,56 +65,52 @@ export class OperatorService {
 
   async login(email: string, password: string, channelId: string) {
     try {
-      this.logger.log(`Operator login attempt: email=${email}, channelId=${channelId}`);
-
-      // Normalize email to lowercase for case-insensitive search
+      // TRACE: Start login attempt
       const normalizedEmail = email.toLowerCase().trim();
+      this.logger.log(`[TRACE] Operator login START: email=${normalizedEmail}, channelId=${channelId}`);
 
       const user = await this.prisma.user.findUnique({
         where: { email: normalizedEmail },
       });
 
+      this.logger.log(`[TRACE] User lookup: found=${!!user}, userId=${user?.id || 'N/A'}`);
+
       if (!user) {
-        this.logger.warn(`Operator login failed: user not found for email=${normalizedEmail}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: user not found for email=${normalizedEmail}`);
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      this.logger.log(`User found: userId=${user.id}`);
-
-      // Validate password hash exists
       if (!user.passwordHash) {
-        this.logger.error(`Operator login failed: passwordHash is null for userId=${user.id}`);
+        this.logger.error(`[TRACE] User ${user.id} has no passwordHash set.`);
         throw new UnauthorizedException('Invalid credentials');
       }
 
       const isValid = await bcrypt.compare(password, user.passwordHash);
+      this.logger.log(`[TRACE] Password check: isValid=${isValid}`);
 
       if (!isValid) {
-        this.logger.warn(`Operator login failed: invalid password for userId=${user.id}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: invalid password for userId=${user.id}`);
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      // Validate channelId is UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(channelId)) {
-        this.logger.warn(`Operator login failed: invalid channelId format: ${channelId}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: invalid channelId format: ${channelId}`);
         throw new UnauthorizedException('Invalid channel ID format');
       }
 
-      // Check channel exists
       const channel = await this.prisma.channel.findUnique({
         where: { id: channelId },
         select: { id: true, ownerUserId: true, name: true },
       });
 
+      this.logger.log(`[TRACE] Channel lookup: found=${!!channel}, channelId=${channel?.id || 'N/A'}, ownerUserId=${channel?.ownerUserId || 'N/A'}, name=${channel?.name || 'N/A'}`);
+
       if (!channel) {
-        this.logger.warn(`Operator login failed: channel not found channelId=${channelId}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: channel not found channelId=${channelId}`);
         throw new UnauthorizedException('Channel not found');
       }
 
-      this.logger.log(`Channel found: channelId=${channelId}, ownerUserId=${channel.ownerUserId}, name=${channel.name}`);
-
-      // Check membership
       let membership = await this.prisma.channelMember.findUnique({
         where: {
           channelId_userId: {
@@ -123,15 +119,14 @@ export class OperatorService {
           },
         },
       }).catch((err: any) => {
-        this.logger.error(`Prisma error finding ChannelMember: ${err.message}`, err.stack);
+        this.logger.error(`[TRACE] Prisma error finding ChannelMember: ${err.message}`, err.stack);
         throw new UnauthorizedException('Database error');
       });
 
-      this.logger.log(`ChannelMember lookup result: ${membership ? `found, role=${membership.role}` : 'not found'}`);
+      this.logger.log(`[TRACE] Membership lookup: found=${!!membership}, role=${membership?.role || 'N/A'}, membershipId=${membership?.id || 'N/A'}`);
 
-      // Fallback: if user is owner and no membership found, auto-create owner membership
       if (!membership && channel.ownerUserId === user.id) {
-        this.logger.warn(`No ChannelMember found for owner userId=${user.id}, channelId=${channelId}. Auto-creating owner membership.`);
+        this.logger.warn(`[TRACE] No ChannelMember found for owner. Auto-creating owner membership. userId=${user.id}, channelId=${channelId}`);
         try {
           membership = await this.prisma.channelMember.upsert({
             where: {
@@ -149,10 +144,9 @@ export class OperatorService {
               role: 'owner',
             },
           });
-          this.logger.log(`Auto-created owner membership: userId=${user.id}, channelId=${channelId}`);
+          this.logger.log(`[TRACE] Auto-created owner membership: userId=${user.id}, channelId=${channelId}, role=${membership.role}`);
         } catch (error: any) {
-          this.logger.error(`Failed to auto-create owner membership: ${error.message}`, error.stack);
-          // Re-fetch in case it was created concurrently
+          this.logger.error(`[TRACE] Failed to auto-create owner membership: ${error.message}`, error.stack);
           membership = await this.prisma.channelMember.findUnique({
             where: {
               channelId_userId: {
@@ -165,7 +159,7 @@ export class OperatorService {
       }
 
       if (!membership) {
-        this.logger.warn(`Operator login failed: user is not a member of this channel. userId=${user.id}, channelId=${channelId}`);
+        this.logger.warn(`[TRACE] Operator login FAILED: user is not a member of this channel. userId=${user.id}, channelId=${channelId}`);
         throw new UnauthorizedException('User is not a member of this channel');
       }
 
@@ -181,7 +175,7 @@ export class OperatorService {
         expiresIn: '7d',
       });
 
-      this.logger.log(`Operator login successful: userId=${user.id}, channelId=${channelId}, role=${membership.role}`);
+      this.logger.log(`[TRACE] Operator login SUCCESS: userId=${user.id}, channelId=${channelId}, role=${membership.role}`);
 
       return {
         operatorAccessToken,
@@ -197,12 +191,10 @@ export class OperatorService {
         role: membership.role,
       };
     } catch (error: any) {
-      // Re-throw HttpExceptions as-is
+      this.logger.error(`[TRACE] Operator login ERROR: ${error.constructor.name}, message=${error.message}`, error.stack);
       if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
         throw error;
       }
-      // Log unexpected errors
-      this.logger.error(`Unexpected error in operator login: ${error.message}`, error.stack);
       throw new UnauthorizedException('Login failed');
     }
   }
