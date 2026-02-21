@@ -82,15 +82,14 @@ export class AuthService {
       });
 
       // Fallback: case-insensitive search for existing users with mixed casing
+      // Fallback: case-insensitive search for existing users with mixed casing (using raw SQL)
       if (!user) {
-        user = await this.prisma.user.findFirst({
-          where: {
-            email: {
-              equals: normalizedEmail,
-              mode: 'insensitive',
-            },
-          },
-        });
+        const users = await this.prisma.\Array<{ id: string; email: string; passwordHash: string; createdAt: Date }>>\n          SELECT id, email, " passwordHash, eatedAt\n FROM users
+ WHERE LOWER(email) = LOWER()
+ LIMIT 1
+ ;
+ user = users[0] || null;
+ }
       }
 
       if (!user) {
