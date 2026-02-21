@@ -142,14 +142,28 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       createdAt: message.createdAt.toISOString(),
     });
 
-    // Отправка другим (операторам)
-    this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', {
+    // Emit to both widget and operator namespaces for realtime delivery
+    const messagePayload = {
       serverMessageId: message.id,
       conversationId,
       text: message.text,
       senderType: 'visitor',
       createdAt: message.createdAt.toISOString(),
-    });
+    };
+
+    // Emit to widget namespace (other widgets in same conversation)
+    this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
+
+    // Emit to operator namespace (operators watching this conversation)
+    // Access main server to get operator namespace
+    const mainServer = (this.server as any).server;
+    if (mainServer) {
+      const operatorNamespace = mainServer.of('/operator');
+      if (operatorNamespace) {
+        operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
+        this.logger.log(`[REALTIME] Emitted message:new to operator namespace for conversation:${conversationId}`);
+      }
+    }
   }
 
   @SubscribeMessage('sync:request')

@@ -32,7 +32,7 @@ function App() {
   const [onlineVisitors, setOnlineVisitors] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [operatorToken, setOperatorToken] = useState<string | null>(
-    localStorage.getItem('operator_token') || null
+    localStorage.getItem('operatorAccessToken') || null
   );
   const [operatorChannelId, setOperatorChannelId] = useState<string | null>(
     localStorage.getItem('operator_channel_id') || null
@@ -85,7 +85,7 @@ function App() {
       const data = await response.json();
       setOperatorToken(data.operatorAccessToken);
       setOperatorChannelId(data.channelId);
-      localStorage.setItem('operator_token', data.operatorAccessToken);
+      localStorage.setItem('operatorAccessToken', data.operatorAccessToken);
       localStorage.setItem('operator_channel_id', data.channelId);
 
       await handleConnectWithToken(data.operatorAccessToken, data.channelId);
@@ -160,6 +160,11 @@ function App() {
 
     if (!operatorToken) return;
 
+    // Join conversation room for realtime updates
+    if (socket) {
+      socket.emit('operator:conversation:join', { conversationId });
+    }
+
     try {
       const response = await fetch(
         `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
@@ -207,7 +212,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('operator_token');
+    localStorage.removeItem('operatorAccessToken');
     localStorage.removeItem('operator_channel_id');
     setOperatorToken(null);
     setOperatorChannelId(null);

@@ -112,13 +112,65 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       createdAt: message.createdAt.toISOString(),
     });
 
-    // Emit to widget room (conversation room)
-    this.server.to(`conversation:${conversationId}`).emit('message:new', {
+    // Emit to both widget and operator namespaces for realtime delivery
+    const messagePayload = {
       serverMessageId: message.id,
       conversationId,
       text: message.text,
       senderType: 'operator',
+      senderId: userId,
       createdAt: message.createdAt.toISOString(),
+    };
+
+    // Emit to operator namespace (other operators in same conversation)
+    this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
+
+    // Emit to widget namespace (widgets watching this conversation)
+    // Access main server to get widget namespace
+    const mainServer = (this.server as any).server;
+    if (mainServer) {
+      const widgetNamespace = mainServer.of('/widget');
+      if (widgetNamespace) {
+        widgetNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
+        this.logger.log(`[REALTIME] Emitted message:new to widget namespace for conversation:${conversationId}`);
+      }
+    }
+  }
+
+  @SubscribeMessage('operator:conversation:join')
+  async handleConversationJoin(client: Socket, payload: { conversationId: string }) {
+    const { channelId, userId } = client.data;
+    const { conversationId } = payload;
+
+    // Validate conversation belongs to channel
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { channel: true },
     });
+
+    if (!conversation || conversation.channelId !== channelId) {
+      client.emit('error', { message: 'Invalid conversationId' });
+      return;
+    }
+
+    // Validate operator membership
+    const membership = await this.prisma.channelMember.findUnique({
+      where: {
+        channelId_userId: {
+          channelId,
+          userId,
+        },
+      },
+    });
+
+    if (!membership) {
+      client.emit('error', { message: 'Not a member of this channel' });
+      return;
+    }
+
+    // Join conversation room
+    client.join(`conversation:${conversationId}`);
+    this.logger.log(`[REALTIME] Operator ${userId} joined conversation:${conversationId}`);
+    client.emit('operator:conversation:joined', { conversationId });
   }
 }
