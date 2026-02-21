@@ -260,7 +260,7 @@ export class ProjectsService {
     }
 
     // Check if already a member
-    const existing = await (this.prisma as any).channelMember.findUnique({
+    const existing = await this.prisma.channelMember.findUnique({
       where: {
         channelId_userId: {
           channelId: id,
@@ -278,7 +278,7 @@ export class ProjectsService {
     }
 
     // Add as operator
-    await (this.prisma as any).channelMember.create({
+    await this.prisma.channelMember.create({
       data: {
         channelId: id,
         userId: user.id,
