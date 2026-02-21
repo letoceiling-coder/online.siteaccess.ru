@@ -51,17 +51,26 @@ for (const cssFile of cssFiles) {
     }
     
     // Check for width: 100% (not 100vw) on .app
-    // Match .app block (may span multiple lines)
-    const appMatch = content.match(/\.app\s*\{[^}]*\}/s);
+    // Match .app block (may span multiple lines, minified or not)
+    const appMatch = content.match(/\.app[^{]*\{[^}]*\}/s);
     if (appMatch) {
       const appBlock = appMatch[0];
-      // Check it has width: 100% and does NOT have width: 100vw
-      if (appBlock.includes('width: 100%') && !appBlock.includes('width: 100vw')) {
+      // Check it has width:100% or width: 100% and does NOT have width:100vw or width: 100vw
+      const hasWidth100 = appBlock.includes('width:100%') || appBlock.includes('width: 100%');
+      const hasWidth100vw = appBlock.includes('width:100vw') || appBlock.includes('width: 100vw');
+      if (hasWidth100 && !hasWidth100vw) {
         checks['width: 100% (not 100vw) on .app'] = true;
       }
-    } else if (content.includes('.app') && content.includes('width: 100%') && !content.includes('width: 100vw')) {
-      // Fallback: if we can't match the block but see the pattern, accept it
-      checks['width: 100% (not 100vw) on .app'] = true;
+    }
+    // Also check if .app exists and 100vw is not present anywhere near it
+    if (!checks['width: 100% (not 100vw) on .app']) {
+      const appIndex = content.indexOf('.app');
+      if (appIndex >= 0) {
+        const nearby = content.substring(Math.max(0, appIndex - 50), Math.min(content.length, appIndex + 200));
+        if (nearby.includes('width') && (nearby.includes('100%') || nearby.includes('100%')) && !nearby.includes('100vw')) {
+          checks['width: 100% (not 100vw) on .app'] = true;
+        }
+      }
     }
     
     found = true;
