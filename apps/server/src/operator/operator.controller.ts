@@ -22,8 +22,8 @@ export class OperatorController {
   @UseGuards(AuthGuard('operator-jwt'))
   async getMessages(
     @Query('conversationId') conversationId: string,
-    @Query('limit') limit?: string,
     @Request() req: any,
+    @Query('limit') limit?: string,
   ) {
     return this.operatorService.getMessages(conversationId, limit ? parseInt(limit) : 50);
   }
