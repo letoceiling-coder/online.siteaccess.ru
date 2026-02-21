@@ -211,8 +211,14 @@ export default function Dashboard() {
                 </p>
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => navigate(`/app/project/${project.id}/install`)}
+                    onClick={() => navigate(`/app/project/${project.id}`)}
                     className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700"
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={() => navigate(`/app/project/${project.id}/install`)}
+                    className="flex-1 bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700"
                   >
                     Install
                   </button>

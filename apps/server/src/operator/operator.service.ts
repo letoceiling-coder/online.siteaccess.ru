@@ -161,7 +161,7 @@ export class OperatorService {
 
       if (!membership) {
         this.logger.warn(`[TRACE] Operator login FAILED: user is not a member of this channel. userId=${user.id}, channelId=${channelId}`);
-        throw new UnauthorizedException('User is not a member of this channel');
+        throw new ForbiddenException('Not a member of this project. Ask owner to invite you.');
       }
 
       const payload = {

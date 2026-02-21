@@ -96,6 +96,28 @@ async function main() {
   console.log(`✅ Project ID: ${projectId}`);
   console.log('');
 
+  // STEP 3.1: Verify owner membership exists
+  console.log('STEP 3.1: Verify owner membership exists...');
+  const membersResp = await makeRequest(`${API_URL}/api/projects/${projectId}/operators`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${ownerToken}`,
+    },
+  });
+  console.log(`Status: ${membersResp.status}`);
+  if (membersResp.status !== 200) {
+    console.error(`❌ Failed to get members: ${JSON.stringify(membersResp.body)}`);
+    process.exit(1);
+  }
+  const members = Array.isArray(membersResp.body) ? membersResp.body : [];
+  const ownerMember = members.find((m) => m.role === 'owner');
+  if (!ownerMember) {
+    console.error('❌ Owner membership not found after project creation');
+    process.exit(1);
+  }
+  console.log(`✅ Owner membership exists: ${ownerMember.email} (${ownerMember.role})`);
+  console.log('');
+
   // STEP 4: Register operator
   console.log('STEP 4: Register operator...');
   const opReg = await makeRequest(`${API_URL}/api/auth/register`, {
@@ -113,8 +135,27 @@ async function main() {
   }
   console.log('');
 
-  // STEP 5: Add operator to project
-  console.log('STEP 5: Add operator to project...');
+  // STEP 5: Test operator login BEFORE invite (should fail with 403)
+  console.log('STEP 5: Test operator login BEFORE invite (should fail with 403)...');
+  const opLoginBefore = await makeRequest(`${API_URL}/api/operator/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({
+      email: 'operator@test.com',
+      password: '12345678',
+      channelId: projectId,
+    }),
+  });
+  console.log(`Status: ${opLoginBefore.status}`);
+  if (opLoginBefore.status === 403) {
+    console.log(`✅ Operator login correctly rejected (403): ${opLoginBefore.body.message || 'Not a member'}`);
+  } else {
+    console.error(`❌ Expected 403, got ${opLoginBefore.status}: ${JSON.stringify(opLoginBefore.body)}`);
+    process.exit(1);
+  }
+  console.log('');
+
+  // STEP 6: Add operator to project
+  console.log('STEP 6: Add operator to project...');
   const addOp = await makeRequest(`${API_URL}/api/projects/${projectId}/operators`, {
     method: 'POST',
     headers: {
@@ -130,10 +171,11 @@ async function main() {
     console.error(`❌ Add operator failed: ${JSON.stringify(addOp.body)}`);
     process.exit(1);
   }
+  console.log('✅ Operator added to project');
   console.log('');
 
-  // STEP 6: Test operator login
-  console.log('STEP 6: Test operator login...');
+  // STEP 7: Test operator login AFTER invite (should succeed)
+  console.log('STEP 7: Test operator login AFTER invite (should succeed)...');
   const opLogin = await makeRequest(`${API_URL}/api/operator/auth/login`, {
     method: 'POST',
     body: JSON.stringify({
@@ -153,6 +195,13 @@ async function main() {
   // Final result
   if (opLogin.status === 200 || opLogin.status === 201) {
     console.log('✅✅✅ E2E TEST PASSED ✅✅✅');
+    console.log('');
+    console.log('Summary:');
+    console.log('  ✅ Project created');
+    console.log('  ✅ Owner membership exists');
+    console.log('  ✅ Operator login rejected before invite (403)');
+    console.log('  ✅ Operator invited');
+    console.log('  ✅ Operator login succeeds after invite (200/201)');
     process.exit(0);
   } else {
     console.error(`❌ E2E TEST FAILED: Status ${opLogin.status}`);
