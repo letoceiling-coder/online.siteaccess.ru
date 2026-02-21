@@ -36,8 +36,10 @@ function App() {
     return saved !== null ? saved === 'true' : true;
   });
   const [soundBlocked, setSoundBlocked] = useState(false);
-  const [soundUnlocked, setSoundUnlocked] = useState(false);
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [soundUnlocked, setSoundUnlocked] = useState<boolean>(() => {
+    return localStorage.getItem('soundUnlocked') === '1';
+  });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesWrapRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -51,56 +53,71 @@ function App() {
 
   // Initialize audio element
   useEffect(() => {
-    const audio = new Audio('/sounds/new-message.wav');
-    audio.preload = 'auto';
-    setAudioRef(audio);
-    
-    // Try to play to check if autoplay is blocked
-    audio.play().catch(() => {
-      setSoundBlocked(true);
-    });
+    const a = new Audio('/sounds/new-message.wav');
+    a.preload = 'auto';
+    a.volume = 1;
+    audioRef.current = a;
     
     return () => {
-      audio.pause();
-      audio.src = '';
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
     };
   }, []);
 
+  // Unlock sound function
+  async function unlockSoundOnce() {
+    if (!audioRef.current) return;
+
+    try {
+      audioRef.current.currentTime = 0;
+      await audioRef.current.play();
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setSoundUnlocked(true);
+      localStorage.setItem('soundUnlocked', '1');
+    } catch (e) {
+      console.error('[SOUND] unlock failed:', e);
+    }
+  }
+
+  // Safe play function
+  function playNewMessageSound() {
+    if (!soundEnabled) return;
+    if (!audioRef.current) return;
+
+    try {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+    } catch {}
+  }
+
   // Unlock sound on first user interaction
   useEffect(() => {
-    const unlockSound = () => {
-      if (!soundUnlocked && audioRef) {
-        audioRef.play().then(() => {
-          setSoundUnlocked(true);
-          setSoundBlocked(false);
-        }).catch(() => {
-          // Still blocked, keep button
-        });
-      }
-    };
+    if (soundUnlocked) return;
 
     const handlePointerDown = () => {
-      unlockSound();
+      unlockSoundOnce();
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
 
     const handleKeyDown = () => {
-      unlockSound();
+      unlockSoundOnce();
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
 
-    if (!soundUnlocked) {
-      document.addEventListener('pointerdown', handlePointerDown);
-      document.addEventListener('keydown', handleKeyDown);
-    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [soundUnlocked, audioRef]);
+  }, [soundUnlocked]);
 
   // Check if near bottom of scroll
   const isNearBottom = useCallback((): boolean => {
@@ -111,29 +128,32 @@ function App() {
   }, []);
 
   // Scroll to bottom
-  const scrollToBottom = useCallback((behavior: 'smooth' | 'auto' = 'smooth') => {
+  const scrollToBottom = useCallback((smooth = false) => {
     if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior, block: 'end' });
+      endRef.current.scrollIntoView({
+        block: 'end',
+        behavior: smooth ? 'smooth' : 'auto'
+      });
     }
   }, []);
 
   // Get messages for selected conversation
   const messages = selectedConversation ? (messagesByConversation[selectedConversation] || []) : [];
 
-  // Auto-scroll when messages change for selected conversation
+  // Auto-scroll when conversation is selected
   useEffect(() => {
-    if (selectedConversation && messages.length > 0) {
-      // Small delay to ensure DOM is updated
-      setTimeout(() => {
-        if (isNearBottom()) {
-          scrollToBottom('smooth');
-          setShowScrollButton(false);
-        } else {
-          setShowScrollButton(true);
-        }
-      }, 100);
+    if (!selectedConversation) return;
+    requestAnimationFrame(() => scrollToBottom(false));
+  }, [selectedConversation, scrollToBottom]);
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    if (!selectedConversation) return;
+    const messagesCount = messagesByConversation[selectedConversation]?.length || 0;
+    if (messagesCount > 0) {
+      requestAnimationFrame(() => scrollToBottom(true));
     }
-  }, [messages, selectedConversation, isNearBottom, scrollToBottom]);
+  }, [selectedConversation, messagesByConversation, scrollToBottom]);
 
   useEffect(() => {
     if (operatorToken && operatorChannelId) {
@@ -279,19 +299,13 @@ function App() {
           }
         });
         
-        // Play sound if enabled, unlocked, and message is from visitor (throttled)
-        if (soundEnabled && soundUnlocked && data.senderType === 'visitor' && audioRef) {
+        // Play sound if message is from visitor
+        if (data.senderType === 'visitor') {
           const now = Date.now();
           if (now - lastSoundPlayTime.current > 500) {
             // Throttle: only play if 500ms passed since last play
             lastSoundPlayTime.current = now;
-            audioRef.play().catch((err) => {
-              console.warn('[SOUND] Failed to play sound:', err);
-              if (err.name === 'NotAllowedError') {
-                setSoundBlocked(true);
-                setSoundUnlocked(false);
-              }
-            });
+            playNewMessageSound();
           }
         }
       });
@@ -498,32 +512,13 @@ function App() {
                     onChange={(e) => {
                       setSoundEnabled(e.target.checked);
                       localStorage.setItem('operator_sound_enabled', String(e.target.checked));
-                      if (e.target.checked && soundBlocked) {
-                        // Try to enable sound again
-                        if (audioRef) {
-                          audioRef.play().then(() => {
-                            setSoundBlocked(false);
-                          }).catch(() => {
-                            setSoundBlocked(true);
-                          });
-                        }
-                      }
                     }}
                   />
                   Sound
                 </label>
-                {soundBlocked && !soundUnlocked && (
+                {!soundUnlocked && (
                   <button
-                    onClick={() => {
-                      if (audioRef) {
-                        audioRef.play().then(() => {
-                          setSoundBlocked(false);
-                          setSoundUnlocked(true);
-                        }).catch((err) => {
-                          console.warn('[SOUND] Failed to enable sound:', err);
-                        });
-                      }
-                    }}
+                    onClick={unlockSoundOnce}
                     style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer' }}
                   >
                     Enable sound
