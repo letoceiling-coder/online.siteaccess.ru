@@ -160,6 +160,7 @@ async function main() {
     console.log('\n[9/10] Connect widget and send message...');
     const widgetSocket = io(`${API_URL}/widget`, {
       auth: { token: visitorToken },
+      query: { token: visitorToken },
       transports: ['websocket', 'polling'],
     });
 

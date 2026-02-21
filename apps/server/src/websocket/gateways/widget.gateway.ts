@@ -32,9 +32,13 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(client: Socket) {
     const { channelId, conversationId } = client.data;
-    client.join(`channel:${channelId}`);
-    client.join(`conversation:${conversationId}`);
-    this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
+    if (channelId && conversationId) {
+      client.join(`channel:${channelId}`);
+      client.join(`conversation:${conversationId}`);
+      this.logger.log(`Widget connected: ${client.id}, channel: ${channelId}, conversation: ${conversationId}`);
+    } else {
+      this.logger.warn(`Widget connected but missing data: ${client.id}, channelId: ${channelId}, conversationId: ${conversationId}`);
+    }
   }
 
   async handleDisconnect(client: Socket) {
@@ -43,6 +47,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('message:send')
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
+    this.logger.log(`message:send received from ${client.id}, payload: ${JSON.stringify(payload)}`);
     const { conversationId: socketConvId, visitorId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
 
