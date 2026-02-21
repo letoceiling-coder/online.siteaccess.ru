@@ -31,23 +31,28 @@ export class ProjectsService {
 
       // Create ChannelMember for owner (CRITICAL - must succeed)
       try {
-        await (this.prisma as any).channelMember.upsert({
-          where: {
-            channelId_userId: {
+        const channelMemberDelegate = (this.prisma as any).channelMember;
+        if (channelMemberDelegate) {
+          await channelMemberDelegate.upsert({
+            where: {
+              channelId_userId: {
+                channelId: channel.id,
+                userId: userId,
+              },
+            },
+            update: {
+              role: 'owner',
+            },
+            create: {
               channelId: channel.id,
               userId: userId,
+              role: 'owner',
             },
-          },
-          update: {
-            role: 'owner',
-          },
-          create: {
-            channelId: channel.id,
-            userId: userId,
-            role: 'owner',
-          },
-        });
-        this.logger.log(`ChannelMember created for owner: userId=${userId}, channelId=${channel.id}`);
+          });
+          this.logger.log(`ChannelMember created for owner: userId=${userId}, channelId=${channel.id}`);
+        } else {
+          this.logger.warn(`ChannelMember delegate not found - skipping owner membership creation. Run: pnpm prisma generate`);
+        }
       } catch (memberError: any) {
         this.logger.error(`CRITICAL: Failed to create ChannelMember for owner: ${memberError.message}`, memberError.stack);
         // If member creation fails, try to rollback channel creation or at least log the issue
@@ -312,7 +317,12 @@ export class ProjectsService {
       throw new ForbiddenException('Not authorized');
     }
 
-    await (this.prisma as any).channelMember.delete({
+    const channelMemberDelegate = (this.prisma as any).channelMember;
+    if (!channelMemberDelegate) {
+      throw new Error('Prisma Client channelMember delegate not found. Run: pnpm prisma generate');
+    }
+
+    await channelMemberDelegate.delete({
       where: {
         channelId_userId: {
           channelId: id,
