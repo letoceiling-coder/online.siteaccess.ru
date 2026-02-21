@@ -13,6 +13,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history for commit message check
+
+      - name: Check Prisma changes protection
+        run: |
+          # Check if prisma/schema.prisma or prisma/migrations changed
+          if git diff --name-only HEAD~1 HEAD | grep -E '^apps/server/prisma/(schema\.prisma|migrations/)'; then
+            # Check if commit message contains [DB_CHANGE]
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            if echo "$COMMIT_MSG" | grep -q '\[DB_CHANGE\]'; then
+              echo "✓ Prisma changes detected with [DB_CHANGE] flag - OK"
+            else
+              echo "❌ ERROR: Prisma schema or migrations changed without [DB_CHANGE] flag in commit message"
+              echo "Commit message: $COMMIT_MSG"
+              echo ""
+              echo "To modify Prisma files, include [DB_CHANGE] in your commit message:"
+              echo "  git commit -m '[DB_CHANGE] Description of change'"
+              echo ""
+              echo "See docs/DB_RULES.md for details."
+              exit 1
+            fi
+          else
+            echo "✓ No Prisma changes detected"
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
