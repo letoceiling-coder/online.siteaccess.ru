@@ -9,6 +9,8 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { OperatorAuthGuard } from '../middleware/operator-auth.middleware';
 import { PrismaService } from '../../prisma/prisma.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   namespace: '/operator',
@@ -23,12 +25,56 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(OperatorGateway.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private config: ConfigService,
+  ) {}
 
   async handleConnection(client: Socket) {
-    const { channelId } = client.data;
-    client.join(`channel:${channelId}`);
-    this.logger.log(`Operator connected: ${client.id}, channel: ${channelId}`);
+    // Guard runs for @SubscribeMessage but not for handleConnection
+    // So we need to authenticate here to get channelId for room joining
+    const token = client.handshake.auth?.token || client.handshake.query?.token;
+    
+    if (!token || typeof token !== 'string') {
+      this.logger.warn(`[REALTIME] Operator connection rejected: no token, clientId=${client.id}`);
+      client.disconnect();
+      return;
+    }
+
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.config.get('OPERATOR_JWT_SECRET') || this.config.get('JWT_SECRET') || 'dev-secret',
+      });
+
+      // Verify membership (guard will do this too, but we need channelId here)
+      const membership = await this.prisma.channelMember.findUnique({
+        where: {
+          channelId_userId: {
+            channelId: payload.channelId,
+            userId: payload.userId,
+          },
+        },
+      });
+
+      if (!membership) {
+        this.logger.warn(`[REALTIME] Operator connection rejected: membership not found, clientId=${client.id}`);
+        client.disconnect();
+        return;
+      }
+
+      // Set client data (guard will also set it, but we need it here)
+      client.data.userId = payload.userId;
+      client.data.channelId = payload.channelId;
+      client.data.role = payload.role;
+
+      // Join channel room (CRITICAL for receiving messages from widget)
+      client.join(`channel:${payload.channelId}`);
+      this.logger.log(`[REALTIME] Operator connected: clientId=${client.id}, channel: ${payload.channelId}, joined room: channel:${payload.channelId}`);
+    } catch (error) {
+      this.logger.warn(`[REALTIME] Operator connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
+      client.disconnect();
+    }
   }
 
   async handleDisconnect(client: Socket) {
