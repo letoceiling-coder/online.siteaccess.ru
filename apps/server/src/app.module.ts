@@ -39,6 +39,10 @@ import { OperatorModule } from './operator/operator.module';
         index: 'index.html',
       },
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', 'operator-web', 'public', 'sounds'),
+      serveRoot: '/sounds',
+    }),
     PrismaModule,
     ChannelsModule,
     WidgetModule,
