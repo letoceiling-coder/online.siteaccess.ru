@@ -114,13 +114,20 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // Создание сообщения (skip clientMessageId if column doesn't exist)
+    // Создание сообщения (only fields that exist in DB)
     const message = await this.prisma.message.create({
       data: {
         conversationId,
         senderType: 'visitor',
         text: text.trim(),
-        // clientMessageId - column doesn't exist in DB, skip it
+        // Skip: clientMessageId, ciphertext, encryptionVersion - columns don't exist in DB
+      },
+      select: {
+        id: true,
+        conversationId: true,
+        senderType: true,
+        text: true,
+        createdAt: true,
       },
     });
 
