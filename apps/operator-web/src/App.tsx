@@ -26,17 +26,43 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, Message[]>>({});
   const [messageInput, setMessageInput] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [onlineVisitors, setOnlineVisitors] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('operator_sound_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [operatorToken, setOperatorToken] = useState<string | null>(
     localStorage.getItem('operatorAccessToken') || null
   );
   const [operatorChannelId, setOperatorChannelId] = useState<string | null>(
     localStorage.getItem('operator_channel_id') || null
   );
+
+  // Initialize audio element
+  useEffect(() => {
+    const audio = new Audio('/new-message.mp3');
+    audio.preload = 'auto';
+    setAudioRef(audio);
+    
+    // Try to play to check if autoplay is blocked
+    audio.play().catch(() => {
+      setSoundBlocked(true);
+    });
+    
+    return () => {
+      audio.pause();
+      audio.src = '';
+    };
+  }, []);
+
+  // Get messages for selected conversation
+  const messages = selectedConversation ? (messagesByConversation[selectedConversation] || []) : [];
 
   useEffect(() => {
     if (operatorToken && operatorChannelId) {
@@ -126,14 +152,40 @@ function App() {
       ws.on('message:new', (data: any) => {
         console.log('[REALTIME] Received message:new:', data);
         
-        // If this conversation is currently open, add message to messages list
-        if (data.conversationId === selectedConversation) {
-          setMessages((prev) => [...prev, data]);
-        }
+        const conversationId = data.conversationId;
+        const messageId = data.serverMessageId || data.clientMessageId;
         
-        // Always update conversation list (for badge/notification)
+        // Update messagesByConversation with deduplication
+        setMessagesByConversation((prev) => {
+          const existingMessages = prev[conversationId] || [];
+          
+          // Check for duplicate by serverMessageId or clientMessageId
+          const isDuplicate = existingMessages.some(
+            (msg) => msg.serverMessageId === messageId || msg.serverMessageId === data.clientMessageId
+          );
+          
+          if (isDuplicate) {
+            console.log('[REALTIME] Duplicate message ignored:', messageId);
+            return prev;
+          }
+          
+          // Add new message
+          const newMessage: Message = {
+            serverMessageId: messageId,
+            text: data.text,
+            senderType: data.senderType,
+            createdAt: data.createdAt,
+          };
+          
+          return {
+            ...prev,
+            [conversationId]: [...existingMessages, newMessage],
+          };
+        });
+        
+        // Update conversation list (for badge/notification)
         setConversations((prev) => {
-          const existingIndex = prev.findIndex((conv) => conv.conversationId === data.conversationId);
+          const existingIndex = prev.findIndex((conv) => conv.conversationId === conversationId);
           
           if (existingIndex >= 0) {
             // Update existing conversation
@@ -143,12 +195,10 @@ function App() {
                 : conv
             );
           } else {
-            // New conversation - add it to the list (might be a new visitor)
-            // Note: We don't have full conversation data, so we'll use what we have
-            // The next conversations fetch will get full data
+            // New conversation - add it to the list
             return [
               {
-                conversationId: data.conversationId,
+                conversationId: conversationId,
                 visitorExternalId: 'New visitor',
                 updatedAt: new Date().toISOString(),
                 lastMessageText: data.text,
@@ -157,6 +207,16 @@ function App() {
             ];
           }
         });
+        
+        // Play sound if enabled and message is not from current user
+        if (soundEnabled && data.senderType !== 'operator' && audioRef) {
+          audioRef.play().catch((err) => {
+            console.warn('Failed to play sound:', err);
+            if (err.name === 'NotAllowedError') {
+              setSoundBlocked(true);
+            }
+          });
+        }
       });
 
       ws.on('presence:update', (data: any) => {
@@ -178,7 +238,6 @@ function App() {
 
   const handleSelectConversation = async (conversationId: string) => {
     setSelectedConversation(conversationId);
-    setMessages([]);
 
     if (!operatorToken) return;
 
@@ -187,24 +246,70 @@ function App() {
       socket.emit('operator:conversation:join', { conversationId });
     }
 
-    try {
-      const response = await fetch(
-        `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${operatorToken}`,
-          },
+    // If we already have messages for this conversation, use them
+    if (messagesByConversation[conversationId] && messagesByConversation[conversationId].length > 0) {
+      // Messages already loaded from WS, but fetch to ensure we have all history
+      try {
+        const response = await fetch(
+          `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
+          {
+            headers: {
+              Authorization: `Bearer ${operatorToken}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Merge with existing messages, deduplicate
+          setMessagesByConversation((prev) => {
+            const existing = prev[conversationId] || [];
+            const fetched = data as Message[];
+            
+            // Create a map of existing message IDs
+            const existingIds = new Set(existing.map((m) => m.serverMessageId));
+            
+            // Add only new messages from fetch
+            const newMessages = fetched.filter((m) => !existingIds.has(m.serverMessageId));
+            
+            // Combine: existing (from WS) + new (from fetch), sorted by createdAt
+            const combined = [...existing, ...newMessages].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            
+            return {
+              ...prev,
+              [conversationId]: combined,
+            };
+          });
         }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch messages');
+      } catch (err) {
+        console.error('Failed to fetch messages:', err);
       }
+    } else {
+      // No messages yet, fetch from API
+      try {
+        const response = await fetch(
+          `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
+          {
+            headers: {
+              Authorization: `Bearer ${operatorToken}`,
+            },
+          }
+        );
 
-      const data = await response.json();
-      setMessages(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load messages');
+        if (!response.ok) {
+          throw new Error('Failed to fetch messages');
+        }
+
+        const data = await response.json();
+        setMessagesByConversation((prev) => ({
+          ...prev,
+          [conversationId]: data,
+        }));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load messages');
+      }
     }
   };
 
@@ -212,23 +317,29 @@ function App() {
     if (!messageInput.trim() || !socket || !selectedConversation) return;
 
     const clientMessageId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const trimmedText = messageInput.trim();
 
     socket.emit('message:send', {
       conversationId: selectedConversation,
-      text: messageInput.trim(),
+      text: trimmedText,
       clientMessageId,
     });
 
-    // Add to local messages immediately
-    setMessages((prev) => [
-      ...prev,
-      {
-        serverMessageId: clientMessageId,
-        text: messageInput.trim(),
-        senderType: 'operator',
-        createdAt: new Date().toISOString(),
-      },
-    ]);
+    // Add to local messages immediately (optimistic update)
+    const optimisticMessage: Message = {
+      serverMessageId: clientMessageId,
+      text: trimmedText,
+      senderType: 'operator',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessagesByConversation((prev) => {
+      const existing = prev[selectedConversation] || [];
+      return {
+        ...prev,
+        [selectedConversation]: [...existing, optimisticMessage],
+      };
+    });
 
     setMessageInput('');
   };
@@ -292,6 +403,45 @@ function App() {
             <div className="sidebar-header">
               <h2>Conversations</h2>
               <div className="online-count">Online: {onlineVisitors}</div>
+              <div className="sound-controls" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={soundEnabled}
+                    onChange={(e) => {
+                      setSoundEnabled(e.target.checked);
+                      localStorage.setItem('operator_sound_enabled', String(e.target.checked));
+                      if (e.target.checked && soundBlocked) {
+                        // Try to enable sound again
+                        if (audioRef) {
+                          audioRef.play().then(() => {
+                            setSoundBlocked(false);
+                          }).catch(() => {
+                            setSoundBlocked(true);
+                          });
+                        }
+                      }
+                    }}
+                  />
+                  Sound
+                </label>
+                {soundBlocked && (
+                  <button
+                    onClick={() => {
+                      if (audioRef) {
+                        audioRef.play().then(() => {
+                          setSoundBlocked(false);
+                        }).catch((err) => {
+                          console.warn('Failed to enable sound:', err);
+                        });
+                      }
+                    }}
+                    style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer' }}
+                  >
+                    Enable sound
+                  </button>
+                )}
+              </div>
               <button onClick={handleLogout} className="logout-btn">
                 Logout
               </button>

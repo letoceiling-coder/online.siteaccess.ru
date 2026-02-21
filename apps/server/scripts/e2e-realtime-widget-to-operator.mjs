@@ -208,6 +208,30 @@ async function runE2ETest() {
     await operatorPromise;
     console.log('✓ TEST PASSED: Widget -> Operator realtime delivery works');
 
+    // Verify messages endpoint returns the message
+    console.log('\n[VERIFY] Checking messages endpoint returns the message...');
+    const messagesResp = await fetch(
+      `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
+      {
+        headers: {
+          Authorization: `Bearer ${operatorAccessToken}`,
+        },
+      }
+    );
+
+    if (!messagesResp.ok) {
+      throw new Error(`Messages endpoint failed: ${messagesResp.status}`);
+    }
+
+    const messagesData = await messagesResp.json();
+    const foundMessage = messagesData.find((m: any) => m.text === widgetMessageText);
+    
+    if (!foundMessage) {
+      throw new Error('Message not found in messages endpoint response');
+    }
+
+    console.log(`✓ Messages endpoint returned the message: ${foundMessage.serverMessageId || foundMessage.id}`);
+
     // Cleanup
     widgetSocket.disconnect();
     operatorSocket.disconnect();
