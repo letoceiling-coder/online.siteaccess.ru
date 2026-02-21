@@ -115,7 +115,8 @@ export class OperatorService {
       this.logger.log(`Channel found: channelId=${channelId}, ownerUserId=${channel.ownerUserId}, name=${channel.name}`);
 
       // Check membership
-      let membership = await this.prisma.channelMember.findUnique({
+      // Using bracket notation because Prisma Client generates models dynamically
+      let membership = await (this.prisma as any)['channelMember'].findUnique({
         where: {
           channelId_userId: {
             channelId,
@@ -133,7 +134,7 @@ export class OperatorService {
       if (!membership && channel.ownerUserId === user.id) {
         this.logger.warn(`No ChannelMember found for owner userId=${user.id}, channelId=${channelId}. Auto-creating owner membership.`);
         try {
-          membership = await this.prisma.channelMember.upsert({
+          membership = await (this.prisma as any)['channelMember'].upsert({
             where: {
               channelId_userId: {
                 channelId,
@@ -153,7 +154,7 @@ export class OperatorService {
         } catch (error: any) {
           this.logger.error(`Failed to auto-create owner membership: ${error.message}`, error.stack);
           // Re-fetch in case it was created concurrently
-          membership = await this.prisma.channelMember.findUnique({
+          membership = await (this.prisma as any)['channelMember'].findUnique({
             where: {
               channelId_userId: {
                 channelId,
