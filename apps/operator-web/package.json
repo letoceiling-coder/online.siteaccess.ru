@@ -11,7 +11,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist node_modules"
+    "clean": "rm -rf dist node_modules",
+    "check:overflow": "node scripts/check-overflow.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
