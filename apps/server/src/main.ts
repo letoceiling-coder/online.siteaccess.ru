@@ -84,8 +84,6 @@ async function bootstrap() {
   // that don't match /api, /widget, /operator, /demo, /health, /sounds
   // and are not already handled by static files
   // Use express instance directly to avoid NestJS route registration issues
-  const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.get('*', (req: any, res: any, next: any) => {
     const path = req.path;
     
     // Skip if already handled by static files or API
