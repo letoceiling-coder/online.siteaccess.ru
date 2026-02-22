@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { join } from 'path';
@@ -25,14 +24,6 @@ import { OperatorModule } from './operator/operator.module';
       },
     ]),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'widget', 'dist'),
-      serveRoot: '/widget/v1',
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', '..', 'widget', 'demo'),
-      serveRoot: '/demo',
-    }),
-    ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', '..', 'operator-web', 'dist'),
       serveRoot: '/operator',
       serveStaticOptions: {
@@ -48,11 +39,11 @@ import { OperatorModule } from './operator/operator.module';
     ProjectsModule,
     OperatorModule,
   ],
-          providers: [
+  providers: [
             {
               provide: APP_GUARD,
               useClass: ThrottlerGuard,
             },
-          ],
-        })
-        export class AppModule {}
+  ],
+})
+export class AppModule {}
