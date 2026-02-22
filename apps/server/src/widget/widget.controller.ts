@@ -34,12 +34,18 @@ export class WidgetController {
   }
 
   @Post('ping')
+  @HttpCode(HttpStatus.NO_CONTENT) // 204 No Content
   @Throttle({ default: { limit: 60, ttl: 60000 } }) // 60 requests per minute
   async ping(
     @Body() dto: WidgetPingDto,
     @Headers('origin') origin?: string,
+    @Headers('referer') referer?: string,
     @Headers('user-agent') userAgent?: string,
+    @Req() req?: Request,
   ) {
-    return this.widgetService.ping(dto, origin, userAgent);
+    // Extract origin from Origin header, or fallback to Referer
+    const originHeader = origin || referer || req?.headers?.origin || req?.headers?.referer;
+    await this.widgetService.ping(dto, originHeader, userAgent);
+    // 204 No Content - no body returned
   }
 }

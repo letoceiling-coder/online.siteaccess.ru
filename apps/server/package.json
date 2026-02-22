@@ -22,7 +22,8 @@
     "e2e:realtime:w2o": "node scripts/e2e-realtime-widget-to-operator.mjs",
     "smoke:sound": "node scripts/smoke-sound.mjs",
     "e2e:widget:history": "node scripts/e2e-widget-history.mjs",
-    "smoke:widget:domain": "node scripts/smoke-widget-domain-lock.mjs"
+    "smoke:widget:domain": "node scripts/smoke-widget-domain-lock.mjs",
+    "smoke:widget:ping": "node scripts/smoke-widget-ping.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
