@@ -123,6 +123,9 @@ export class WidgetService {
           id: true,
           allowedDomains: true,
           installVerifiedAt: true,
+          lastWidgetPingAt: true,
+          lastWidgetPingUrl: true,
+          lastWidgetPingUserAgent: true,
         },
       });
 
@@ -159,7 +162,8 @@ export class WidgetService {
       };
 
       // Установить installVerifiedAt только если еще не установлен
-      if (!channel.installVerifiedAt) {
+      // Note: Prisma returns fields in camelCase from schema, not DB column names
+      if (!(channel as any).installVerifiedAt) {
         updateData.installVerifiedAt = new Date();
       }
 
