@@ -45,11 +45,20 @@ class SiteAccessChatWidget {
     this.config = config;
     this.apiBase = config.apiBase || 'https://online.siteaccess.ru';
 
-    // Get or create externalId
-    this.externalId = localStorage.getItem('sa_external_id');
+    // Get or create externalId (token-specific)
+    const tokenHash = this.hashToken(config.token);
+    const storageKey = `sa_externalId:${tokenHash.slice(0, 8)}`;
+    this.externalId = localStorage.getItem(storageKey);
     if (!this.externalId) {
       this.externalId = this.generateUUID();
-      localStorage.setItem('sa_external_id', this.externalId);
+      localStorage.setItem(storageKey, this.externalId);
+    }
+
+    // Get persisted conversationId (token-specific)
+    const conversationKey = `sa_conversationId:${tokenHash.slice(0, 8)}`;
+    const persistedConversationId = localStorage.getItem(conversationKey);
+    if (persistedConversationId) {
+      this.conversationId = persistedConversationId;
     }
 
     // Send ping to verify installation
@@ -57,6 +66,17 @@ class SiteAccessChatWidget {
 
     this.createUI();
     this.setupEventListeners();
+  }
+
+  private hashToken(token: string): string {
+    // Simple hash function (for storage key only, not security)
+    let hash = 0;
+    for (let i = 0; i < token.length; i++) {
+      const char = token.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
   }
 
   private async sendPing() {
@@ -290,7 +310,8 @@ class SiteAccessChatWidget {
       this.socket.on('connect', () => {
         console.log('Widget connected');
         this.startPresenceHeartbeat();
-        this.syncMessages();
+        // Load history via REST API (not WS)
+        this.loadHistory();
       });
 
       this.socket.on('message:ack', (data: any) => {
@@ -303,19 +324,24 @@ class SiteAccessChatWidget {
       });
 
       this.socket.on('message:new', (data: any) => {
-        this.messages.push({
-          serverMessageId: data.serverMessageId,
-          text: data.text,
-          senderType: data.senderType,
-          createdAt: data.createdAt,
-        });
-        this.renderMessages();
+        // Deduplicate: check if message already exists
+        const existing = this.messages.find(
+          m => m.serverMessageId === data.serverMessageId || 
+               m.clientMessageId === data.clientMessageId
+        );
+        
+        if (!existing) {
+          this.messages.push({
+            serverMessageId: data.serverMessageId,
+            clientMessageId: data.clientMessageId,
+            text: data.text,
+            senderType: data.senderType,
+            createdAt: data.createdAt,
+          });
+          this.renderMessages();
+        }
       });
 
-      this.socket.on('sync:response', (data: any) => {
-        this.messages = data.messages || [];
-        this.renderMessages();
-      });
     } catch (error) {
       console.error('Connection error:', error);
     }
@@ -332,12 +358,48 @@ class SiteAccessChatWidget {
     }, 10000);
   }
 
-  private async syncMessages() {
-    if (!this.socket || !this.conversationId) return;
-    this.socket.emit('sync:request', {
-      conversationId: this.conversationId,
-      limit: 50,
-    });
+  private async loadHistory() {
+    if (!this.conversationId || !this.visitorSessionToken) return;
+
+    try {
+      const response = await fetch(
+        `${this.apiBase}/api/widget/messages?conversationId=${this.conversationId}&limit=50`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.visitorSessionToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        console.warn('Failed to load message history, continuing with realtime only');
+        return;
+      }
+
+      const historyMessages = await response.json();
+      
+      // Deduplicate with existing messages
+      const existingIds = new Set(
+        this.messages.map(m => m.serverMessageId || m.clientMessageId).filter(Boolean)
+      );
+      
+      const newMessages = historyMessages.filter((msg: any) => 
+        !existingIds.has(msg.serverMessageId) && !existingIds.has(msg.clientMessageId)
+      );
+      
+      // Merge: history first, then existing (realtime) messages
+      this.messages = [...newMessages, ...this.messages];
+      
+      // Sort by createdAt
+      this.messages.sort((a, b) => 
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      
+      this.renderMessages();
+    } catch (error) {
+      console.warn('Error loading message history:', error);
+      // Soft fail: widget still works realtime
+    }
   }
 
   private sendMessage() {

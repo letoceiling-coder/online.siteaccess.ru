@@ -238,6 +238,12 @@ function App() {
 
       ws.on('connect', () => {
         console.log('Operator connected');
+        
+        // On reconnect, if a conversation is selected, refresh its messages
+        // to ensure we have messages that arrived while offline
+        if (selectedConversation) {
+          handleSelectConversation(selectedConversation);
+        }
       });
 
       ws.on('message:new', (data: any) => {
