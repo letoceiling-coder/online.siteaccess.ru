@@ -44,6 +44,8 @@ async function bootstrap() {
   const express = require('express');
 
   // Portal dist path
+  // __dirname in compiled code is dist/, so:
+  // dist/ -> ../ -> apps/server/ -> ../ -> apps/ -> portal/dist
   const portalDistPath = join(__dirname, '..', '..', 'portal', 'dist');
   
   // 1. Widget dist at /widget/v1
@@ -58,42 +60,45 @@ async function bootstrap() {
   const demoPath = join(__dirname, '..', '..', 'widget', 'demo');
   expressApp.use('/demo', express.static(demoPath, { index: false }));
   
-  // 4. Serve sounds directory
+  // 4. Serve sounds directory BEFORE portal static (to avoid SPA fallback)
   const soundsPath = join(__dirname, '..', '..', 'operator-web', 'public', 'sounds');
   app.useStaticAssets(soundsPath, {
     prefix: '/sounds',
     index: false,
   });
   
-  // 5. Serve portal static assets
+  // 5. Serve portal static assets (CSS, JS, images) at root
+  // This must NOT serve index.html automatically
   app.useStaticAssets(portalDistPath, {
     prefix: '/',
     index: false,
   });
-  
-  // 6. SPA fallback for operator
+
+  // 6. SPA fallback: serve portal index.html ONLY for GET requests
+  // that don't match /api, /widget, /operator, /demo, /health, /sounds
+  // and are not already handled by static files
+  // Also serve operator index.html for /operator/* routes that don't match static files
   expressApp.get('/operator/*', (req: any, res: any, next: any) => {
+    // Serve operator index.html for SPA routes under /operator
     res.sendFile(join(operatorDistPath, 'index.html'), (err: any) => {
       if (err) {
         next(err);
       }
     });
   });
-
-  // 7. SPA fallback: serve portal index.html ONLY for GET requests
-  // that don't match /api, /widget, /operator, /demo, /health, /sounds
-  // and are not already handled by static files
-  // Use express instance directly to avoid NestJS route registration issues
-    const path = req.path;
+  
+  // SPA fallback for all other routes
+  expressApp.get('*', (req: any, res: any, next: any) => {
+    const requestPath = req.path;
     
     // Skip if already handled by static files or API
     if (
-      path.startsWith('/api') ||
-      path.startsWith('/widget') ||
-      path.startsWith('/operator') ||
-      path.startsWith('/demo') ||
-      path.startsWith('/health') ||
-      path.startsWith('/sounds')
+      requestPath.startsWith('/api') ||
+      requestPath.startsWith('/widget') ||
+      requestPath.startsWith('/operator') ||
+      requestPath.startsWith('/demo') ||
+      requestPath.startsWith('/health') ||
+      requestPath.startsWith('/sounds')
     ) {
       return next();
     }
@@ -112,4 +117,7 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   logger.log(`Application is running on: http://localhost:${port}`);
 }
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('Failed to start application:', error);
+  process.exit(1);
+});
