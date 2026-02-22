@@ -119,7 +119,7 @@ export class WidgetService {
       
       const channel = await this.prisma.channel.findUnique({
         where: { tokenHash },
-        select: {
+        , // Removed select
           id: true,
           allowedDomains: true,
           installVerifiedAt: true,
