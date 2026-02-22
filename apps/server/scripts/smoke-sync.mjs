@@ -136,7 +136,7 @@ async function runSmoke() {
 
     // 5) Verify sync returns messages after sinceCreatedAt
     if (lastCreatedAt && syncData.messages) {
-      const afterLast = syncData.messages.filter((msg: any) => 
+      const afterLast = syncData.messages.filter((msg) => 
         msg.createdAt > lastCreatedAt
       );
       console.log(`  Messages after sinceCreatedAt: ${afterLast.length}`);

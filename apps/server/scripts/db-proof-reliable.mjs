@@ -20,7 +20,7 @@ async function main() {
     // Find latest conversationId (via Prisma)
     const latestConversation = await prisma.conversation.findFirst({
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, channelId: true, externalId: true },
+      select: { id: true, channelId: true, visitorId: true },
     });
 
     if (!latestConversation) {
@@ -31,7 +31,7 @@ async function main() {
     const conversationId = latestConversation.id;
     console.log(`Latest conversation: ${conversationId}`);
     console.log(`  Channel: ${latestConversation.channelId}`);
-    console.log(`  External ID: ${latestConversation.externalId}\n`);
+    console.log(`  Visitor ID: ${latestConversation.visitorId || 'N/A'}\n`);
 
     // Query messages for that conversation
     const messages = await prisma.message.findMany({
@@ -76,11 +76,11 @@ async function main() {
 
     console.log('\n=== Result ===');
     if (duplicates > 0) {
-      console.error(`??? FAILED: Found ${duplicates} duplicate messages!`);
+      console.error(`❌ FAILED: Found ${duplicates} duplicate messages!`);
       console.error('  This indicates message loss or duplicate delivery.');
       process.exit(1);
     } else {
-      console.log('??? PASSED: No duplicates found (duplicates = 0)');
+      console.log('✅ PASSED: No duplicates found (duplicates = 0)');
       console.log('  All messages have unique clientMessageId or are null.');
       process.exit(0);
     }

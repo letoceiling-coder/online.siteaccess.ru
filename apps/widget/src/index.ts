@@ -355,37 +355,38 @@ class SiteAccessChatWidget {
         const msg = this.messages.find((m) => m.clientMessageId === data.clientMessageId);
         if (msg) {
           // Idempotency: if already delivered, skip update (safe to receive ACK twice)
-          if (msg.delivered && msg.status === " sent && msg.serverMessageId === data.serverMessageId) {
- console.log([ACK] Duplicate ACK ignored for ...);
- return;
- }
- 
- msg.delivered = true;
- msg.status = sent;
- if (data.serverMessageId) {
- msg.serverMessageId = data.serverMessageId;
- }
- // Update lastSeenCreatedAt
- if (data.createdAt) {
- this.lastSeenCreatedAt = data.createdAt;
- this.saveLastSeenCreatedAt();
- }
- // Re-sort after updating serverMessageId (stable: createdAt ASC, then id ASC)
- this.messages.sort((a, b) => {
- const timeA = new Date(a.createdAt).getTime();
- const timeB = new Date(b.createdAt).getTime();
- if (timeA !== timeB) {
- return timeA - timeB;
- }
- // Stable sort by id if createdAt is equal
- const idA = a.serverMessageId || a.clientMessageId || \;
- const idB = b.serverMessageId || b.clientMessageId || \;
- return idA.localeCompare(idB);
- });
- this.renderMessages();
- } else {
- console.warn(message:ack received for unknown clientMessageId: \);
- }
+          if (msg.delivered && msg.status === 'sent' && msg.serverMessageId === data.serverMessageId) {
+            console.log(`[ACK] Duplicate ACK ignored for ${data.clientMessageId ? data.clientMessageId.substring(0, 8) : 'unknown'}...`);
+            return;
+          }
+          
+          msg.delivered = true;
+          msg.status = 'sent';
+          if (data.serverMessageId) {
+            msg.serverMessageId = data.serverMessageId;
+          }
+          // Update lastSeenCreatedAt
+          if (data.createdAt) {
+            this.lastSeenCreatedAt = data.createdAt;
+            this.saveLastSeenCreatedAt();
+          }
+          // Re-sort after updating serverMessageId (stable: createdAt ASC, then id ASC)
+          this.messages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) {
+              return timeA - timeB;
+            }
+            // Stable sort by id if createdAt is equal
+            const idA = a.serverMessageId || a.clientMessageId || '';
+            const idB = b.serverMessageId || b.clientMessageId || '';
+            return idA.localeCompare(idB);
+          });
+          this.renderMessages();
+        } else {
+          console.warn(`message:ack received for unknown clientMessageId: ${data.clientMessageId}`);
+        }
+      });
 
       this.socket.on('message:new', (data: any) => {
         // Deduplicate: check if message already exists
@@ -406,18 +407,10 @@ class SiteAccessChatWidget {
         
         if (!existing) {
           this.messages.push({
-          // Sort by createdAt ASC, then id ASC (stable ordering)
-          this.messages.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime();
-            const timeB = new Date(b.createdAt).getTime();
-            if (timeA !== timeB) {
-              return timeA - timeB;
-            }
-            // Stable sort by id if createdAt is equal
-            const idA = a.serverMessageId || a.clientMessageId || " ;
- const idB = b.serverMessageId || b.clientMessageId || \;
- return idA.localeCompare(idB);
- });
+            serverMessageId: data.serverMessageId,
+            clientMessageId: data.clientMessageId,
+            text: data.text,
+            senderType: data.senderType,
             createdAt: data.createdAt,
             delivered: true,
             status: 'sent',
@@ -427,10 +420,18 @@ class SiteAccessChatWidget {
             this.lastSeenCreatedAt = data.createdAt;
             this.saveLastSeenCreatedAt();
           }
-          // Sort by createdAt to maintain chronological order
-          this.messages.sort((a, b) => 
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
+          // Sort by createdAt ASC, then id ASC (stable ordering)
+          this.messages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) {
+              return timeA - timeB;
+            }
+            // Stable sort by id if createdAt is equal
+            const idA = a.serverMessageId || a.clientMessageId || '';
+            const idB = b.serverMessageId || b.clientMessageId || '';
+            return idA.localeCompare(idB);
+          });
           this.renderMessages();
         }
       });
@@ -448,18 +449,10 @@ class SiteAccessChatWidget {
         );
 
         const newMessages = data.messages.filter((msg: any) => {
-        // Sort by createdAt ASC, then id ASC (stable ordering)
-        this.messages.sort((a, b) => {
-          const timeA = new Date(a.createdAt).getTime();
-          const timeB = new Date(b.createdAt).getTime();
-          if (timeA !== timeB) {
-            return timeA - timeB;
-          }
-          // Stable sort by id if createdAt is equal
-          const idA = a.serverMessageId || a.clientMessageId || " ;
- const idB = b.serverMessageId || b.clientMessageId || \;
- return idA.localeCompare(idB);
- });
+          const id = msg.serverMessageId || msg.clientMessageId;
+          return id && !existingIds.has(id);
+        });
+
         for (const msg of newMessages) {
           this.messages.push({
             serverMessageId: msg.serverMessageId,
@@ -477,10 +470,18 @@ class SiteAccessChatWidget {
           }
         }
 
-        // Sort by createdAt
-        this.messages.sort((a, b) => 
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
+        // Sort by createdAt ASC, then id ASC (stable ordering)
+        this.messages.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          if (timeA !== timeB) {
+            return timeA - timeB;
+          }
+          // Stable sort by id if createdAt is equal
+          const idA = a.serverMessageId || a.clientMessageId || '';
+          const idB = b.serverMessageId || b.clientMessageId || '';
+          return idA.localeCompare(idB);
+        });
         this.renderMessages();
       });
 
@@ -533,9 +534,18 @@ class SiteAccessChatWidget {
       this.messages = [...newMessages, ...this.messages];
       
       // Sort by createdAt
-      this.messages.sort((a, b) => 
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
+      // Sort by createdAt ASC, then id ASC (stable ordering)
+      this.messages.sort((a, b) => {
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        if (timeA !== timeB) {
+          return timeA - timeB;
+        }
+        // Stable sort by id if createdAt is equal
+        const idA = a.serverMessageId || a.clientMessageId || '';
+        const idB = b.serverMessageId || b.clientMessageId || '';
+        return idA.localeCompare(idB);
+      });
       
       this.renderMessages();
     } catch (error) {
@@ -569,9 +579,18 @@ class SiteAccessChatWidget {
     this.messages.push(message);
     
     // Sort by createdAt
-    this.messages.sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    // Sort by createdAt ASC, then id ASC (stable ordering)
+    this.messages.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      // Stable sort by id if createdAt is equal
+      const idA = a.serverMessageId || a.clientMessageId || '';
+      const idB = b.serverMessageId || b.clientMessageId || '';
+      return idA.localeCompare(idB);
+    });
     
     this.renderMessages();
     this.input.value = '';
