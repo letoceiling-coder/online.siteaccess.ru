@@ -25,7 +25,8 @@
     "smoke:widget:domain": "node scripts/smoke-widget-domain-lock.mjs",
     "smoke:widget:ping": "node scripts/smoke-widget-ping.mjs",
     "smoke:widget:session:stable": "node scripts/smoke-widget-session-stable.mjs",
-    "e2e:history:parity": "node scripts/e2e-history-parity.mjs"
+    "e2e:history:parity": "node scripts/e2e-history-parity.mjs",
+    "e2e:widget:realtime": "node scripts/e2e-widget-realtime-append.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
