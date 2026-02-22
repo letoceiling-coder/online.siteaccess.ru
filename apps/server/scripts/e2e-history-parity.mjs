@@ -90,10 +90,29 @@ async function runE2E() {
 
     const projectData = await projectResponse.json();
     const projectId = projectData.id;
-    const widgetToken = projectData.widgetSettings?.token;
+    
+    // Get widget token (may need to call /token endpoint)
+    let widgetToken = projectData.widgetSettings?.token;
     
     if (!widgetToken) {
-      throw new Error('Widget token not found in project response');
+      // Try to get token from /token endpoint
+      console.log('  Widget token not in response, fetching from /token endpoint...');
+      const tokenResponse = await fetch(`${API_URL}/api/projects/${projectId}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${ownerToken}`,
+        },
+      });
+      
+      if (tokenResponse.ok) {
+        const tokenData = await tokenResponse.json();
+        widgetToken = tokenData.token;
+      }
+    }
+    
+    if (!widgetToken) {
+      throw new Error('Widget token not found in project response or /token endpoint');
     }
 
     console.log(`✓ Project created: ${projectId.substring(0, 8)}...`);
