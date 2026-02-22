@@ -122,7 +122,7 @@ export class WidgetService {
         select: {
           id: true,
           allowedDomains: true,
-          installverifiedat: true,
+          installVerifiedAt: true,
           lastWidgetPingAt: true,
           lastWidgetPingUrl: true,
           lastWidgetPingUserAgent: true,
@@ -161,10 +161,10 @@ export class WidgetService {
         lastWidgetPingUserAgent: userAgent || null,
       };
 
-      // Установить installverifiedat только если еще не установлен
+      // Установить installVerifiedAt только если еще не установлен
       // Note: Prisma returns fields in camelCase from schema, not DB column names
-      if (!(channel as any).installverifiedat) {
-        updateData.installverifiedat = new Date();
+      if (!(channel as any).installVerifiedAt) {
+        updateData.installVerifiedAt = new Date();
       }
 
       await this.prisma.channel.update({
