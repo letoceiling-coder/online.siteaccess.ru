@@ -45,11 +45,20 @@ class SiteAccessChatWidget {
     this.config = config;
     this.apiBase = config.apiBase || 'https://online.siteaccess.ru';
 
-    // Get or create externalId
-    this.externalId = localStorage.getItem('sa_external_id');
+    // Get or create externalId (token-specific)
+    const tokenHash = this.hashToken(config.token);
+    const storageKey = `sa_externalId:${tokenHash.slice(0, 8)}`;
+    this.externalId = localStorage.getItem(storageKey);
     if (!this.externalId) {
       this.externalId = this.generateUUID();
-      localStorage.setItem('sa_external_id', this.externalId);
+      localStorage.setItem(storageKey, this.externalId);
+    }
+
+    // Get persisted conversationId (token-specific)
+    const conversationKey = `sa_conversationId:${tokenHash.slice(0, 8)}`;
+    const persistedConversationId = localStorage.getItem(conversationKey);
+    if (persistedConversationId) {
+      this.conversationId = persistedConversationId;
     }
 
     // Send ping to verify installation
@@ -57,6 +66,17 @@ class SiteAccessChatWidget {
 
     this.createUI();
     this.setupEventListeners();
+  }
+
+  private hashToken(token: string): string {
+    // Simple hash function (for storage key only, not security)
+    let hash = 0;
+    for (let i = 0; i < token.length; i++) {
+      const char = token.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
   }
 
   private async sendPing() {
