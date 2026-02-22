@@ -351,28 +351,41 @@ class SiteAccessChatWidget {
           this.savePendingMessages();
         }
         
-        // Update message in UI
+        // Update message in UI (idempotent: receiving same ACK twice is safe)
         const msg = this.messages.find((m) => m.clientMessageId === data.clientMessageId);
         if (msg) {
-          msg.delivered = true;
-          msg.status = 'sent';
-          if (data.serverMessageId) {
-            msg.serverMessageId = data.serverMessageId;
-          }
-          // Update lastSeenCreatedAt
-          if (data.createdAt) {
-            this.lastSeenCreatedAt = data.createdAt;
-            this.saveLastSeenCreatedAt();
-          }
-          // Re-sort after updating serverMessageId
-          this.messages.sort((a, b) => 
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
-          this.renderMessages();
-        } else {
-          console.warn(`message:ack received for unknown clientMessageId: ${data.clientMessageId}`);
-        }
-      });
+          // Idempotency: if already delivered, skip update (safe to receive ACK twice)
+          if (msg.delivered && msg.status === " sent && msg.serverMessageId === data.serverMessageId) {
+ console.log([ACK] Duplicate ACK ignored for ...);
+ return;
+ }
+ 
+ msg.delivered = true;
+ msg.status = sent;
+ if (data.serverMessageId) {
+ msg.serverMessageId = data.serverMessageId;
+ }
+ // Update lastSeenCreatedAt
+ if (data.createdAt) {
+ this.lastSeenCreatedAt = data.createdAt;
+ this.saveLastSeenCreatedAt();
+ }
+ // Re-sort after updating serverMessageId (stable: createdAt ASC, then id ASC)
+ this.messages.sort((a, b) => {
+ const timeA = new Date(a.createdAt).getTime();
+ const timeB = new Date(b.createdAt).getTime();
+ if (timeA !== timeB) {
+ return timeA - timeB;
+ }
+ // Stable sort by id if createdAt is equal
+ const idA = a.serverMessageId || a.clientMessageId || \;
+ const idB = b.serverMessageId || b.clientMessageId || \;
+ return idA.localeCompare(idB);
+ });
+ this.renderMessages();
+ } else {
+ console.warn(message:ack received for unknown clientMessageId: \);
+ }
 
       this.socket.on('message:new', (data: any) => {
         // Deduplicate: check if message already exists
@@ -393,10 +406,18 @@ class SiteAccessChatWidget {
         
         if (!existing) {
           this.messages.push({
-            serverMessageId: data.serverMessageId,
-            clientMessageId: data.clientMessageId,
-            text: data.text,
-            senderType: data.senderType,
+          // Sort by createdAt ASC, then id ASC (stable ordering)
+          this.messages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) {
+              return timeA - timeB;
+            }
+            // Stable sort by id if createdAt is equal
+            const idA = a.serverMessageId || a.clientMessageId || " ;
+ const idB = b.serverMessageId || b.clientMessageId || \;
+ return idA.localeCompare(idB);
+ });
             createdAt: data.createdAt,
             delivered: true,
             status: 'sent',
@@ -427,10 +448,18 @@ class SiteAccessChatWidget {
         );
 
         const newMessages = data.messages.filter((msg: any) => {
-          const id = msg.serverMessageId || msg.clientMessageId;
-          return id && !existingIds.has(id);
-        });
-
+        // Sort by createdAt ASC, then id ASC (stable ordering)
+        this.messages.sort((a, b) => {
+          const timeA = new Date(a.createdAt).getTime();
+          const timeB = new Date(b.createdAt).getTime();
+          if (timeA !== timeB) {
+            return timeA - timeB;
+          }
+          // Stable sort by id if createdAt is equal
+          const idA = a.serverMessageId || a.clientMessageId || " ;
+ const idB = b.serverMessageId || b.clientMessageId || \;
+ return idA.localeCompare(idB);
+ });
         for (const msg of newMessages) {
           this.messages.push({
             serverMessageId: msg.serverMessageId,
