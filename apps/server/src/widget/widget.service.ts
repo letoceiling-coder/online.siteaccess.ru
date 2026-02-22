@@ -117,15 +117,7 @@ export class WidgetService {
     try {
       const tokenHash = crypto.createHash('sha256').update(dto.token).digest('hex');
       
-      const channel = await this.prisma.channel.findUnique({
-        where: { tokenHash },
-        , // Removed select
-          id: true,
-          allowedDomains: true,
-          installVerifiedAt: true,
-          lastWidgetPingAt: true,
-          lastWidgetPingUrl: true,
-          lastWidgetPingUserAgent: true,
+      });
         },
       });
 
