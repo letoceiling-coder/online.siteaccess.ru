@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { OperatorModule } from './operator/operator.module';
 import { CallsModule } from './calls/calls.module';
+import { SmokeModule } from './smoke/smoke.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { CallsModule } from './calls/calls.module';
     ProjectsModule,
     OperatorModule,
     CallsModule,
+    SmokeModule,
   ],
   providers: [
     {
