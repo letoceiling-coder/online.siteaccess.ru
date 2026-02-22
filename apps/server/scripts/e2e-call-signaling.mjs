@@ -277,6 +277,8 @@ async function runE2E() {
 
     // Operator sends call:offer
     console.log('  [8.1] Operator sending call:offer...');
+    console.log(`    callId=${callId}, conversationId=${conversationId}, channelId=${channelId}`);
+    
     operatorSocket.emit('call:offer', {
       callId,
       conversationId,
@@ -286,9 +288,20 @@ async function runE2E() {
       sdp: 'fake-sdp-offer',
       timestamp: new Date().toISOString(),
     });
+    
+    // Listen for errors
+    operatorSocket.on('error', (err) => {
+      console.log(`    Operator socket error: ${JSON.stringify(err)}`);
+    });
+    operatorSocket.on('call:failed', (data) => {
+      console.log(`    Operator received call:failed: ${JSON.stringify(data)}`);
+    });
 
-    await sleep(2000);
+    await sleep(3000);
     if (!widgetReceivedOffer) {
+      console.log('    ⚠️  Widget did not receive call:offer after 3s');
+      console.log(`    Widget socket connected: ${widgetSocket.connected}`);
+      console.log(`    Operator socket connected: ${operatorSocket.connected}`);
       throw new Error('Widget did not receive call:offer');
     }
 

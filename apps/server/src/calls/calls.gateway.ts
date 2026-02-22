@@ -19,14 +19,19 @@ import { OperatorAuthGuard } from '../websocket/middleware/operator-auth.middlew
 
 // CallsGateway provides helper methods for call signaling
 // Actual event handlers are in WidgetGateway and OperatorGateway
+// Note: CallsGateway needs access to server from WidgetGateway/OperatorGateway
 @Injectable()
 export class CallsGateway {
-  @WebSocketServer()
-  server: Server;
-
   private readonly logger = new Logger(CallsGateway.name);
 
   constructor(private callsService: CallsService) {}
+  
+  // Server will be injected by WidgetGateway/OperatorGateway
+  private server: Server | null = null;
+  
+  setServer(server: Server) {
+    this.server = server;
+  }
 
   // Helper method to forward call events to conversation room
   forwardCallEvent(
@@ -35,8 +40,15 @@ export class CallsGateway {
     payload: any,
     conversationId: string,
     excludeClientId?: string,
+    server?: Server,
   ) {
-    const namespaceServer = this.server.of(namespace);
+    const srv = server || this.server;
+    if (!srv) {
+      this.logger.error(`Cannot forward ${event}: server not available`);
+      return;
+    }
+    
+    const namespaceServer = srv.of(namespace);
     const room = `conversation:${conversationId}`;
     
     this.logger.log(`Forwarding ${event} to ${namespace} room ${room}${excludeClientId ? ` (excluding ${excludeClientId})` : ''}`);
@@ -100,8 +112,11 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.forwardCallEvent('/widget', 'call:ring', ringPayload, conversationId);
-    this.forwardCallEvent('/operator', 'call:ring', ringPayload, conversationId);
+    // Get server from client's namespace
+    const server = client.server;
+    
+    this.forwardCallEvent('/widget', 'call:ring', ringPayload, conversationId, undefined, server);
+    this.forwardCallEvent('/operator', 'call:ring', ringPayload, conversationId, undefined, server);
 
     // Forward offer to both namespaces (excluding sender)
     const offerPayload = {
@@ -109,8 +124,8 @@ export class CallsGateway {
       sdp: dto.sdp,
     };
 
-    this.forwardCallEvent('/widget', 'call:offer', offerPayload, conversationId, client.id);
-    this.forwardCallEvent('/operator', 'call:offer', offerPayload, conversationId, client.id);
+    this.forwardCallEvent('/widget', 'call:offer', offerPayload, conversationId, client.id, server);
+    this.forwardCallEvent('/operator', 'call:offer', offerPayload, conversationId, client.id, server);
 
     this.logger.log(`Call offer forwarded: callId=${dto.callId}, conversationId=${conversationId}`);
   }
@@ -359,8 +374,9 @@ export class CallsGateway {
       sdp: dto.sdp,
     };
 
-    this.server.of('/widget').to(`conversation:${conversationId}`).except(client.id).emit('call:answer', payload);
-    this.server.of('/operator').to(`conversation:${conversationId}`).except(client.id).emit('call:answer', payload);
+    const server = client.server;
+    this.forwardCallEvent('/widget', 'call:answer', payload, conversationId, client.id, server);
+    this.forwardCallEvent('/operator', 'call:answer', payload, conversationId, client.id, server);
 
     this.logger.log(`Call answer forwarded: callId=${dto.callId}`);
   }
@@ -396,8 +412,9 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.server.of('/widget').to(`conversation:${conversationId}`).except(client.id).emit('call:ice', payload);
-    this.server.of('/operator').to(`conversation:${conversationId}`).except(client.id).emit('call:ice', payload);
+    const server = client.server;
+    this.forwardCallEvent('/widget', 'call:ice', payload, conversationId, client.id, server);
+    this.forwardCallEvent('/operator', 'call:ice', payload, conversationId, client.id, server);
   }
 
   // Handle call:hangup
@@ -434,8 +451,9 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.server.of('/widget').to(`conversation:${conversationId}`).emit('call:hangup', payload);
-    this.server.of('/operator').to(`conversation:${conversationId}`).emit('call:hangup', payload);
+    const server = client.server;
+    this.forwardCallEvent('/widget', 'call:hangup', payload, conversationId, undefined, server);
+    this.forwardCallEvent('/operator', 'call:hangup', payload, conversationId, undefined, server);
 
     this.logger.log(`Call hangup: callId=${dto.callId}, reason=${dto.reason || 'hangup'}`);
   }
@@ -474,8 +492,9 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.server.of('/widget').to(`conversation:${conversationId}`).except(client.id).emit('call:busy', payload);
-    this.server.of('/operator').to(`conversation:${conversationId}`).except(client.id).emit('call:busy', payload);
+    const server = client.server;
+    this.forwardCallEvent('/widget', 'call:busy', payload, conversationId, client.id, server);
+    this.forwardCallEvent('/operator', 'call:busy', payload, conversationId, client.id, server);
 
     this.logger.log(`Call busy: callId=${dto.callId}`);
   }
