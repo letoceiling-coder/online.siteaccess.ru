@@ -5,7 +5,7 @@
   "description": "NestJS backend server",
   "scripts": {
     "dev": "nest start --watch",
-    "prebuild": "prisma generate",
+    "prebuild": "prisma generate --schema=prisma/schema.prisma",
     "build": "nest build",
     "start": "node dist/main",
     "start:prod": "node dist/main.js",
@@ -28,7 +28,13 @@
     "e2e:history:parity": "node scripts/e2e-history-parity.mjs",
     "e2e:widget:realtime": "node scripts/e2e-widget-realtime-append.mjs",
     "e2e:reliable:messaging": "node scripts/e2e-reliable-messaging.mjs",
-    "smoke:sync": "node scripts/smoke-sync.mjs"
+    "e2e:reliable": "node scripts/e2e-reliable-messaging.mjs",
+    "smoke:sync": "node scripts/smoke-sync.mjs",
+    "smoke:calls:ice": "node scripts/smoke-calls-ice.mjs",
+    "smoke:throttle": "node scripts/smoke-throttle.mjs",
+    "db:proof:reliable": "node scripts/db-proof-reliable.mjs",
+    "db:proof:calls": "node scripts/db-proof-calls.mjs",
+    "e2e:calls:signaling": "node scripts/e2e-call-signaling.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
