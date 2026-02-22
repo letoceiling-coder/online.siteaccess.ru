@@ -53,6 +53,24 @@ function App() {
   const [operatorChannelId, setOperatorChannelId] = useState<string | null>(
     localStorage.getItem('operator_channel_id') || null
   );
+  const pendingMessagesRef = useRef<Map<string, Message>>(new Map()); // clientMessageId -> message
+  const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map()); // clientMessageId -> timer
+  const lastSeenCreatedAtRef = useRef<string | null>(null); // For sync after reconnect
+  const maxRetries = 5;
+  const retryDelays = [3000, 6000, 12000, 24000, 48000]; // Exponential backoff in ms
+  
+  // Call state
+  const [callState, setCallState] = useState<{
+    callId: string | null;
+    status: 'idle' | 'calling' | 'ringing' | 'in_call' | 'ended';
+    kind: 'audio' | 'video' | null;
+    incomingCall: { callId: string; fromRole: string; kind: string } | null;
+  }>({
+    callId: null,
+    status: 'idle',
+    kind: null,
+    incomingCall: null,
+  });
 
   // Initialize audio element
   useEffect(() => {
@@ -242,6 +260,13 @@ function App() {
       ws.on('connect', () => {
         console.log('Operator connected');
         
+        // Resend pending messages on reconnect
+        resendPendingMessages();
+        // Request sync for active conversation
+        if (selectedConversationRef.current) {
+          requestSync(selectedConversationRef.current);
+        }
+        
         // On reconnect, if a conversation is selected, refresh its messages
         // to ensure we have messages that arrived while offline
         if (selectedConversation) {
@@ -253,33 +278,53 @@ function App() {
         console.log('[REALTIME] Received message:new:', data);
         
         const conversationId = data.conversationId;
-        const messageId = data.serverMessageId || data.clientMessageId;
         
         // Update messagesByConversation with deduplication
         setMessagesByConversation((prev) => {
           const existingMessages = prev[conversationId] || [];
           
-          // Check for duplicate by serverMessageId or clientMessageId
-          const isDuplicate = existingMessages.some(
-            (msg) => msg.serverMessageId === messageId || msg.serverMessageId === data.clientMessageId
-          );
+          // Dedupe rules: Prefer serverMessageId when present, only use clientMessageId if both are non-empty strings
+          const isDuplicate = existingMessages.some((msg) => {
+            // If both have serverMessageId, compare by that
+            if (msg.serverMessageId && data.serverMessageId) {
+              return msg.serverMessageId === data.serverMessageId;
+            }
+            // If both have clientMessageId (non-empty), compare by that
+            if (msg.clientMessageId && data.clientMessageId && 
+                msg.clientMessageId !== '' && data.clientMessageId !== '') {
+              return msg.clientMessageId === data.clientMessageId;
+            }
+            // Never treat undefined/null/"" as valid dedupe keys
+            return false;
+          });
           
           if (isDuplicate) {
-            console.log('[REALTIME] Duplicate message ignored:', messageId);
+            console.log('[REALTIME] Duplicate message ignored:', data.serverMessageId || data.clientMessageId);
             return prev;
           }
           
           // Add new message
           const newMessage: Message = {
-            serverMessageId: messageId,
+            serverMessageId: data.serverMessageId,
+            clientMessageId: data.clientMessageId,
             text: data.text,
             senderType: data.senderType,
             createdAt: data.createdAt,
+            status: 'sent',
           };
+          
+          // Update lastSeenCreatedAt
+          if (data.createdAt && (!lastSeenCreatedAtRef.current || data.createdAt > lastSeenCreatedAtRef.current)) {
+            lastSeenCreatedAtRef.current = data.createdAt;
+            saveLastSeenCreatedAt(data.createdAt);
+          }
+          
+          // Merge and sort: createdAt ASC, then id ASC (stable ordering)
+          const merged = mergeMessages(existingMessages, [newMessage]);
           
           return {
             ...prev,
-            [conversationId]: [...existingMessages, newMessage],
+            [conversationId]: merged,
           };
         });
         
@@ -327,6 +372,114 @@ function App() {
 
       ws.on('message:ack', (data: any) => {
         console.log('Message ACK:', data);
+        if (!data.clientMessageId) {
+          console.warn('message:ack received without clientMessageId');
+          return;
+        }
+
+        // Clear retry timer and remove from pending (idempotent: safe to call multiple times)
+        clearRetryTimer(data.clientMessageId);
+        const wasPending = pendingMessagesRef.current.delete(data.clientMessageId);
+        if (wasPending) {
+          savePendingMessages();
+        }
+
+        // Update message status in UI (idempotent: receiving same ACK twice is safe)
+        setMessagesByConversation((prev) => {
+          const updated = { ...prev };
+          if (updated[data.conversationId]) {
+            const messages = updated[data.conversationId];
+            const msgIndex = messages.findIndex((m) => m.clientMessageId === data.clientMessageId);
+            if (msgIndex >= 0) {
+              const existingMsg = messages[msgIndex];
+              // Idempotency: if already sent with same serverMessageId, skip update
+              if (existingMsg.status === 'sent' && existingMsg.serverMessageId === data.serverMessageId) {
+                console.log(`[ACK] Duplicate ACK ignored for ${data.clientMessageId.substring(0, 8)}...`);
+                return prev;
+              }
+              updated[data.conversationId] = [...messages];
+              updated[data.conversationId][msgIndex] = {
+                ...existingMsg,
+                status: 'sent',
+                serverMessageId: data.serverMessageId,
+                createdAt: data.createdAt, // Update createdAt from server
+              };
+            }
+          }
+          return updated;
+        });
+        // Update lastSeenCreatedAt
+        if (data.createdAt && (!lastSeenCreatedAtRef.current || data.createdAt > lastSeenCreatedAtRef.current)) {
+          lastSeenCreatedAtRef.current = data.createdAt;
+          saveLastSeenCreatedAt(data.createdAt);
+        }
+      });
+
+      // Call event handlers
+      ws.on('call:ring', (data: any) => {
+        if (data.conversationId === selectedConversation) {
+          setCallState(prev => ({
+            ...prev,
+            incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind },
+            status: 'ringing',
+          }));
+        }
+      });
+
+      ws.on('call:offer', (data: any) => {
+        if (data.conversationId === selectedConversation && data.fromRole === 'visitor') {
+          setCallState(prev => ({
+            ...prev,
+            callId: data.callId,
+            incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind },
+            status: 'ringing',
+            kind: data.kind,
+          }));
+        }
+      });
+
+      ws.on('call:answer', (data: any) => {
+        if (data.callId === callState.callId) {
+          setCallState(prev => ({ ...prev, status: 'in_call' }));
+        }
+      });
+
+      ws.on('call:hangup', (data: any) => {
+        if (data.callId === callState.callId || data.callId === callState.incomingCall?.callId) {
+          setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
+        }
+      });
+
+      ws.on('call:busy', (data: any) => {
+        if (data.callId === callState.callId) {
+          setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
+        }
+      });
+
+      ws.on('sync:response', (data: any) => {
+        console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
+        if (!data.conversationId || !data.messages) return;
+
+        setMessagesByConversation((prev) => {
+          const existingMessages = prev[data.conversationId] || [];
+          const newMessages = data.messages as Message[];
+
+          const mergedMessages = mergeMessages(existingMessages, newMessages);
+          
+          // Update lastSeenCreatedAt from the latest message in sync response
+          if (mergedMessages.length > 0) {
+            const latestSyncMsg = mergedMessages[mergedMessages.length - 1];
+            if (latestSyncMsg.createdAt && (!lastSeenCreatedAtRef.current || latestSyncMsg.createdAt > lastSeenCreatedAtRef.current)) {
+              lastSeenCreatedAtRef.current = latestSyncMsg.createdAt;
+              saveLastSeenCreatedAt(latestSyncMsg.createdAt);
+            }
+          }
+
+          return {
+            ...prev,
+            [data.conversationId]: mergedMessages,
+          };
+        });
       });
 
       setSocket(ws);
@@ -334,6 +487,35 @@ function App() {
       setError(err.message || 'Connection failed');
       setConnected(false);
     }
+  };
+
+  // Helper to merge messages with deduplication and stable sorting
+  const mergeMessages = (existing: Message[], incoming: Message[]): Message[] => {
+    const allMessages = [...existing, ...incoming];
+    const uniqueMessages = new Map<string, Message>();
+
+    for (const msg of allMessages) {
+      const key = msg.serverMessageId || msg.clientMessageId;
+      if (key) {
+        // Prefer serverMessageId if available, otherwise clientMessageId
+        // Never treat undefined/null/"" as valid dedupe keys
+        if (!uniqueMessages.has(key) || (msg.serverMessageId && !uniqueMessages.get(key)?.serverMessageId)) {
+          uniqueMessages.set(key, msg);
+        }
+      }
+    }
+    
+    // Stable sort: createdAt ASC, then id ASC
+    const sorted = Array.from(uniqueMessages.values()).sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      if (dateA !== dateB) return dateA - dateB;
+      // Stable sort by serverMessageId if createdAt is same
+      const idA = a.serverMessageId || a.clientMessageId || '';
+      const idB = b.serverMessageId || b.clientMessageId || '';
+      return idA.localeCompare(idB);
+    });
+    return sorted;
   };
 
   const handleSelectConversation = async (conversationId: string) => {
@@ -373,10 +555,8 @@ function App() {
             // Add only new messages from fetch
             const newMessages = fetched.filter((m) => !existingIds.has(m.serverMessageId));
             
-            // Combine: existing (from WS) + new (from fetch), sorted by createdAt
-            const combined = [...existing, ...newMessages].sort(
-              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
+            // Combine: existing (from WS) + new (from fetch), sorted by createdAt ASC, then id ASC (stable)
+            const combined = mergeMessages(existing, fetched);
             
             return {
               ...prev,
@@ -671,7 +851,41 @@ function App() {
               <>
                 <div className="chat-header">
                   <h3>Chat</h3>
+                  {callState.status === 'idle' && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => handleStartCall('audio')} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        Call
+                      </button>
+                      <button onClick={() => handleStartCall('video')} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        Video
+                      </button>
+                    </div>
+                  )}
+                  {callState.status === 'calling' && <div>Calling...</div>}
+                  {callState.status === 'in_call' && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span>In call ({callState.kind})</span>
+                      <button onClick={handleHangup} style={{ padding: '6px 12px', fontSize: '12px', background: '#dc3545' }}>
+                        Hang up
+                      </button>
+                    </div>
+                  )}
                 </div>
+                {callState.incomingCall && callState.status === 'ringing' && (
+                  <div style={{ padding: '12px', background: '#f0f0f0', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong>Incoming {callState.incomingCall.kind} call</strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={handleAcceptCall} style={{ padding: '8px 16px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>
+                        Accept
+                      </button>
+                      <button onClick={handleDeclineCall} style={{ padding: '8px 16px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div 
                   className="messages-container"
                   ref={messagesWrapRef}

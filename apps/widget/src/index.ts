@@ -37,6 +37,17 @@ class SiteAccessChatWidget {
   private panel: HTMLElement | null = null;
   private messagesContainer: HTMLElement | null = null;
   private input: HTMLInputElement | null = null;
+  private callState: {
+    callId: string | null;
+    status: 'idle' | 'ringing' | 'in_call' | 'ended';
+    kind: 'audio' | 'video' | null;
+    incomingCall: { callId: string; fromRole: string; kind: string } | null;
+  } = {
+    callId: null,
+    status: 'idle',
+    kind: null,
+    incomingCall: null,
+  };
 
   constructor() {
     this.init();
@@ -313,6 +324,10 @@ class SiteAccessChatWidget {
       const data = await response.json();
       this.conversationId = data.conversationId;
       this.visitorSessionToken = data.visitorSessionToken;
+      // Store channelId for call handlers
+      if (data.channelId) {
+        (window as any).__sa_channelId = data.channelId;
+      }
 
       // Connect WebSocket
       this.socket = io(`${this.apiBase}/widget`, {
@@ -433,6 +448,44 @@ class SiteAccessChatWidget {
             return idA.localeCompare(idB);
           });
           this.renderMessages();
+        }
+      });
+
+      // Call event handlers
+      this.socket.on('call:ring', (data: any) => {
+        this.callState.incomingCall = { callId: data.callId, fromRole: data.fromRole, kind: data.kind };
+        this.callState.status = 'ringing';
+        this.renderIncomingCall();
+      });
+
+      this.socket.on('call:offer', (data: any) => {
+        if (data.fromRole === 'operator') {
+          this.callState.callId = data.callId;
+          this.callState.incomingCall = { callId: data.callId, fromRole: 'operator', kind: data.kind };
+          this.callState.status = 'ringing';
+          this.callState.kind = data.kind;
+          this.renderIncomingCall();
+        }
+      });
+
+      this.socket.on('call:answer', (data: any) => {
+        if (data.callId === this.callState.callId) {
+          this.callState.status = 'in_call';
+          this.renderIncomingCall();
+        }
+      });
+
+      this.socket.on('call:hangup', (data: any) => {
+        if (data.callId === this.callState.callId || data.callId === this.callState.incomingCall?.callId) {
+          this.callState = { callId: null, status: 'idle', kind: null, incomingCall: null };
+          this.renderIncomingCall();
+        }
+      });
+
+      this.socket.on('call:busy', (data: any) => {
+        if (data.callId === this.callState.callId) {
+          this.callState = { callId: null, status: 'idle', kind: null, incomingCall: null };
+          this.renderIncomingCall();
         }
       });
 
@@ -723,6 +776,88 @@ class SiteAccessChatWidget {
       }
     } catch (e) {
       console.warn('Failed to load lastSeenCreatedAt', e);
+    }
+  }
+
+  private handleAcceptCall() {
+    if (!this.socket || !this.callState.incomingCall || !this.conversationId) return;
+    
+    const callId = this.callState.incomingCall.callId;
+    this.callState.callId = callId;
+    this.callState.status = 'in_call';
+    this.renderIncomingCall();
+    
+    // Get channelId from session (stored during connect)
+    const channelId = (window as any).__sa_channelId;
+    if (!channelId) {
+      console.error('ChannelId not found');
+      return;
+    }
+    
+    this.socket.emit('call:answer', {
+      callId,
+      conversationId: this.conversationId,
+      channelId,
+      fromRole: 'visitor',
+      sdp: 'fake-sdp-answer',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  private handleDeclineCall() {
+    if (!this.socket || !this.callState.incomingCall || !this.conversationId) return;
+    
+    const channelId = (window as any).__sa_channelId;
+    if (!channelId) return;
+    
+    this.socket.emit('call:busy', {
+      callId: this.callState.incomingCall.callId,
+      conversationId: this.conversationId,
+      channelId,
+      fromRole: 'visitor',
+      reason: 'declined',
+      timestamp: new Date().toISOString(),
+    });
+    
+    this.callState = { callId: null, status: 'idle', kind: null, incomingCall: null };
+    this.renderIncomingCall();
+  }
+
+  private renderIncomingCall() {
+    if (!this.panel) return;
+    
+    let callPanel = this.panel.querySelector('.incoming-call-panel') as HTMLElement;
+    
+    if (this.callState.status === 'ringing' && this.callState.incomingCall) {
+      if (!callPanel) {
+        callPanel = document.createElement('div');
+        callPanel.className = 'incoming-call-panel';
+        callPanel.style.cssText = 'padding: 12px; background: #f0f0f0; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;';
+        this.panel.insertBefore(callPanel, this.messagesContainer);
+      }
+      
+      callPanel.innerHTML = `
+        <div><strong>Incoming ${this.callState.incomingCall.kind} call</strong></div>
+        <div style="display: flex; gap: 8px;">
+          <button class="accept-call" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Accept</button>
+          <button class="decline-call" style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">Decline</button>
+        </div>
+      `;
+      
+      callPanel.querySelector('.accept-call')?.addEventListener('click', () => this.handleAcceptCall());
+      callPanel.querySelector('.decline-call')?.addEventListener('click', () => this.handleDeclineCall());
+    } else if (this.callState.status === 'in_call') {
+      if (!callPanel) {
+        callPanel = document.createElement('div');
+        callPanel.className = 'incoming-call-panel';
+        callPanel.style.cssText = 'padding: 12px; background: #d4edda; border-bottom: 1px solid #ddd; text-align: center;';
+        this.panel.insertBefore(callPanel, this.messagesContainer);
+      }
+      callPanel.innerHTML = `<div>In call (${this.callState.kind})</div>`;
+    } else {
+      if (callPanel) {
+        callPanel.remove();
+      }
     }
   }
 
