@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Socket } from 'socket.io';
@@ -6,6 +6,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class OperatorAuthGuard implements CanActivate {
+  private readonly logger = new Logger(OperatorAuthGuard.name);
+
   constructor(
     private config: ConfigService,
     private jwtService: JwtService,
@@ -32,8 +34,13 @@ export class OperatorAuthGuard implements CanActivate {
     const token = client.handshake.auth?.token || client.handshake.query?.token;
 
     if (!token || typeof token !== 'string') {
+      this.logger.warn(`[TRACE_WS] Operator auth failed: no token, clientId=${client.id}`);
       throw new UnauthorizedException('Token required');
     }
+
+    // Log token prefix (first 12 chars) for debugging
+    const tokenPrefix = token.substring(0, 12);
+    this.logger.log(`[TRACE_WS] Operator auth attempt: clientId=${client.id}, tokenPrefix=${tokenPrefix}...`);
 
     try {
       const payload = this.jwtService.verify(token, {
@@ -41,7 +48,7 @@ export class OperatorAuthGuard implements CanActivate {
       });
 
       // Verify membership
-      const membership = await (this.prisma as any).channelMember.findUnique({
+      const membership = await this.prisma.channelMember.findUnique({
         where: {
           channelId_userId: {
             channelId: payload.channelId,
@@ -57,8 +64,10 @@ export class OperatorAuthGuard implements CanActivate {
       client.data.userId = payload.userId;
       client.data.channelId = payload.channelId;
       client.data.role = payload.role;
+      this.logger.log(`[TRACE_WS] Operator auth success: clientId=${client.id}, userId=${payload.userId}, channelId=${payload.channelId}`);
       return true;
-    } catch {
+    } catch (error: any) {
+      this.logger.warn(`[TRACE_WS] Operator auth failed: clientId=${client.id}, error=${error.message || 'unknown'}`);
       throw new UnauthorizedException('Invalid token');
     }
   }
