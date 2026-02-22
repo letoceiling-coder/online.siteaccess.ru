@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { WidgetSessionDto } from './dto/widget-session.dto';
@@ -29,17 +29,20 @@ export class WidgetService {
       throw new UnauthorizedException('Invalid token');
     }
 
-    // Проверка Origin
+    // Проверка Origin (domain lock)
     const originHost = origin ? new URL(origin).hostname : null;
     const allowedDomains = channel.allowedDomains as string[] | null;
+    const channelIdPrefix = channel.id.substring(0, 8);
     
     if (allowedDomains && allowedDomains.length > 0) {
       if (!originHost || !allowedDomains.includes(originHost)) {
-        throw new UnauthorizedException('Origin not allowed');
+        this.logger.warn(`[DOMAIN_LOCK] Channel ${channelIdPrefix}... denied: origin=${originHost || 'missing'}, allowed=${allowedDomains.join(',')}`);
+        throw new ForbiddenException('DOMAIN_NOT_ALLOWED');
       }
+      this.logger.log(`[DOMAIN_LOCK] Channel ${channelIdPrefix}... allowed: origin=${originHost}`);
     } else {
       // Dev mode: разрешить все, но предупредить
-      this.logger.warn(`Channel ${channel.id} has no allowedDomains - allowing all origins (dev mode)`);
+      this.logger.warn(`[DOMAIN_LOCK] Channel ${channelIdPrefix}... has no allowedDomains - allowing all origins (dev mode)`);
     }
 
     // Создать/обновить Visitor
@@ -138,5 +141,51 @@ export class WidgetService {
     });
 
     return { ok: true };
+  }
+
+  async getMessages(conversationId: string, visitorSessionToken: string, limit: number = 50) {
+    if (!visitorSessionToken) {
+      throw new UnauthorizedException('Missing visitorSessionToken');
+    }
+
+    // Verify token and extract conversationId
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(visitorSessionToken, {
+        secret: process.env.JWT_SECRET || 'dev-secret',
+      });
+    } catch (error) {
+      throw new UnauthorizedException('Invalid visitorSessionToken');
+    }
+
+    // Verify conversationId matches token
+    if (payload.conversationId !== conversationId) {
+      throw new UnauthorizedException('Conversation ID mismatch');
+    }
+
+    // Fetch messages
+    const messages = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        conversationId: true,
+        senderType: true,
+        senderId: true,
+        text: true,
+        createdAt: true,
+        clientMessageId: true,
+      },
+    });
+
+    return messages.map((msg) => ({
+      serverMessageId: msg.id,
+      conversationId: msg.conversationId,
+      text: msg.text,
+      senderType: msg.senderType,
+      createdAt: msg.createdAt.toISOString(),
+      clientMessageId: msg.clientMessageId,
+    }));
   }
 }
