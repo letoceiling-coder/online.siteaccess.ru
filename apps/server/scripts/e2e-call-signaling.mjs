@@ -85,7 +85,27 @@ async function runE2E() {
 
     const project = await projectRes.json();
     const projectId = project.id;
-    const widgetToken = project.widgetToken;
+    
+    // Get widget token from project (field is 'token', not 'widgetToken')
+    let widgetToken = project.token;
+    if (!widgetToken) {
+      // Try to regenerate token
+      const tokenRes = await fetch(`${API_URL}/api/projects/${projectId}/token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        widgetToken = tokenData.token;
+      }
+    }
+    
+    if (!widgetToken) {
+      throw new Error('Widget token not found');
+    }
+    
     console.log(`✓ Project created: ${projectId.substring(0, 8)}...\n`);
 
     // 3) Register/login operator
@@ -149,14 +169,19 @@ async function runE2E() {
 
     // 6) Create widget session
     console.log('[6] Creating widget session...');
+    const externalId = `visitor_${timestamp}_${Math.random().toString(36).substring(7)}`;
     const sessionRes = await fetch(`${API_URL}/api/widget/session`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: widgetToken }),
+      headers: { 
+        'Content-Type': 'application/json',
+        'Origin': 'https://example.com', // For domain lock bypass in test
+      },
+      body: JSON.stringify({ token: widgetToken, externalId }),
     });
 
     if (!sessionRes.ok) {
-      throw new Error(`Widget session failed: ${sessionRes.status}`);
+      const errorText = await sessionRes.text();
+      throw new Error(`Widget session failed: ${sessionRes.status} ${errorText}`);
     }
 
     const session = await sessionRes.json();
