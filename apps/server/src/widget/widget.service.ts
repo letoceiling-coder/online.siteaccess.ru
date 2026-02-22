@@ -228,7 +228,7 @@ export class WidgetService {
         id: true,
         conversationId: true,
         senderType: true,
-        senderId: true,
+        
         text: true,
         createdAt: true,
         clientMessageId: true,
