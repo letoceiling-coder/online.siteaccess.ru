@@ -219,7 +219,11 @@ async function runE2E() {
     console.log('  ✓ Widget socket connected');
     console.log('  ✓ Operator socket connected\n');
 
-    // Wait for rooms to be joined
+    // Wait for rooms to be joined, then join conversation room
+    await sleep(500);
+    
+    // Join conversation room (required for operator to receive events)
+    operatorSocket.emit('operator:conversation:join', { conversationId });
     await sleep(500);
 
     // 8) Signaling flow
