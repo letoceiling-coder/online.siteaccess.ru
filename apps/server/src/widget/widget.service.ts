@@ -122,11 +122,7 @@ export class WidgetService {
         select: {
           id: true,
           allowedDomains: true,
-          installVerifiedAt: true,
-          lastWidgetPingAt: true,
-          lastWidgetPingUrl: true,
-          lastWidgetPingUserAgent: true,
-        },
+      });
       });
 
       if (!channel) {
