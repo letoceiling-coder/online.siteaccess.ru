@@ -134,10 +134,10 @@ async function runE2E() {
 
     // 5) Operator login (get operatorAccessToken)
     console.log('[5] Operator login...');
-    const opLoginOperatorRes = await fetch(`${API_URL}/api/operator/login`, {
+    const opLoginOperatorRes = await fetch(`${API_URL}/api/operator/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: opEmail, password: opPass }),
+      body: JSON.stringify({ email: opEmail, password: opPass, channelId: projectId }),
     });
 
     if (!opLoginOperatorRes.ok) {
