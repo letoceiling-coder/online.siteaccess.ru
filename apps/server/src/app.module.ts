@@ -33,6 +33,11 @@ import { CallsModule } from './calls/calls.module';
     OperatorModule,
     CallsModule,
   ],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
