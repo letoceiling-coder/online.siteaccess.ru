@@ -119,7 +119,6 @@ export class WidgetService {
       const channel = await this.prisma.channel.findUnique({
         where: { tokenHash },
       });
-      });
 
       if (!channel) {
         this.logger.warn(`[PING] Invalid token: ${tokenPreview}, origin: ${originHost || 'missing'}`);
