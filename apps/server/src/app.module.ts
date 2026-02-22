@@ -22,12 +22,8 @@ import { OperatorModule } from './operator/operator.module';
         limit: 100, // 100 requests per minute
       },
     ]),
-      rootPath: join(__dirname, '..', '..', 'operator-web', 'dist'),
-      serveRoot: '/operator',
-      serveStaticOptions: {
         index: 'index.html',
       },
-    }),
     PrismaModule,
     ChannelsModule,
     WidgetModule,
