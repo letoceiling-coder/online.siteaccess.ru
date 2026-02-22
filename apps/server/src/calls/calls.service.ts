@@ -76,7 +76,7 @@ export class CallsService {
     // Operator access: check membership
     if (userId) {
       const isMember = conversation.channel.members.some(
-        (m) => m.userId === userId && m.role === 'operator',
+        (m) => m.userId === userId && (m.role === 'operator' || m.role === 'owner'),
       );
       if (!isMember) {
         return false;
