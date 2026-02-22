@@ -10,6 +10,7 @@ import { WebsocketModule } from './websocket/websocket.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { OperatorModule } from './operator/operator.module';
+import { CallsModule } from './calls/calls.module';
 
 @Module({
   imports: [
@@ -22,8 +23,6 @@ import { OperatorModule } from './operator/operator.module';
         limit: 100, // 100 requests per minute
       },
     ]),
-        index: 'index.html',
-      },
     PrismaModule,
     ChannelsModule,
     WidgetModule,
@@ -35,10 +34,10 @@ import { OperatorModule } from './operator/operator.module';
     CallsModule,
   ],
   providers: [
-            {
-              provide: APP_GUARD,
-              useClass: ThrottlerGuard,
-            },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
