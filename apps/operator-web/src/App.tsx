@@ -13,10 +13,13 @@ interface Conversation {
 }
 
 interface Message {
-  serverMessageId: string;
+  serverMessageId?: string;
+  clientMessageId?: string;
   text: string | null;
   senderType: 'visitor' | 'operator';
   createdAt: string;
+  status?: 'pending' | 'sent' | 'failed';
+  retryCount?: number;
 }
 
 function App() {
@@ -417,33 +420,138 @@ function App() {
     }
   };
 
-  const handleSendMessage = () => {
-    if (!messageInput.trim() || !socket || !selectedConversation) return;
+  const sendMessageToServer = useCallback((message: Message) => {
+    if (!socket || !selectedConversation || !message.clientMessageId) return;
 
-    const clientMessageId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const trimmedText = messageInput.trim();
+    if (!socket.connected) {
+      console.warn('Socket not connected, message will be sent on reconnect');
+      return;
+    }
 
     socket.emit('message:send', {
       conversationId: selectedConversation,
-      text: trimmedText,
-      clientMessageId,
+      text: message.text,
+      clientMessageId: message.clientMessageId,
     });
 
-    // Add to local messages immediately (optimistic update)
-    const optimisticMessage: Message = {
-      serverMessageId: clientMessageId,
+    // Start retry timer if no ACK received
+    scheduleRetry(message);
+  }, [socket, selectedConversation]);
+
+  const scheduleRetry = useCallback((message: Message) => {
+    if (!message.clientMessageId) return;
+
+    const retryCount = message.retryCount || 0;
+    if (retryCount >= maxRetries) {
+      console.error(`Message ${message.clientMessageId} failed after ${retryCount} retries`);
+      setMessagesByConversation((prev) => {
+        const updated = { ...prev };
+        if (updated[selectedConversation!]) {
+          const messages = updated[selectedConversation!];
+          const msgIndex = messages.findIndex((m) => m.clientMessageId === message.clientMessageId);
+          if (msgIndex >= 0) {
+            updated[selectedConversation!] = [...messages];
+            updated[selectedConversation!][msgIndex] = { ...messages[msgIndex], status: 'failed' };
+          }
+        }
+        return updated;
+      });
+      return;
+    }
+
+    const delay = retryDelays[Math.min(retryCount, retryDelays.length - 1)];
+    
+    const timer = setTimeout(() => {
+      if (pendingMessagesRef.current.has(message.clientMessageId!)) {
+        message.retryCount = (message.retryCount || 0) + 1;
+        console.log(`Retrying message ${message.clientMessageId} (attempt ${message.retryCount})`);
+        sendMessageToServer(message);
+      }
+    }, delay);
+
+    retryTimersRef.current.set(message.clientMessageId, timer);
+  }, [selectedConversation, sendMessageToServer]);
+
+  const resendPendingMessages = useCallback(() => {
+    if (pendingMessagesRef.current.size === 0) return;
+
+    console.log(`Resending ${pendingMessagesRef.current.size} pending messages`);
+    for (const [clientMessageId, message] of pendingMessagesRef.current.entries()) {
+      // Reset retry count on reconnect
+      message.retryCount = 0;
+      sendMessageToServer(message);
+    }
+  }, [sendMessageToServer]);
+
+  const requestSync = useCallback((conversationId: string) => {
+    if (!socket || !socket.connected) return;
+
+    const sinceCreatedAt = lastSeenCreatedAtRef.current || null;
+    console.log(`Requesting sync for conversation ${conversationId} since: ${sinceCreatedAt || 'beginning'}`);
+
+    socket.emit('sync:request', {
+      conversationId,
+      sinceCreatedAt,
+      limit: 100,
+    });
+  }, [socket]);
+
+  const saveLastSeenCreatedAt = useCallback((createdAt: string) => {
+    try {
+      localStorage.setItem('operator_lastSeenCreatedAt', createdAt);
+    } catch (e) {
+      console.warn('Failed to save lastSeenCreatedAt', e);
+    }
+  }, []);
+
+  const loadLastSeenCreatedAt = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('operator_lastSeenCreatedAt');
+      if (stored) {
+        lastSeenCreatedAtRef.current = stored;
+      }
+    } catch (e) {
+      console.warn('Failed to load lastSeenCreatedAt', e);
+    }
+  }, []);
+
+  // Load lastSeenCreatedAt on mount
+  useEffect(() => {
+    loadLastSeenCreatedAt();
+  }, [loadLastSeenCreatedAt]);
+
+  const handleSendMessage = () => {
+    if (!messageInput.trim() || !socket || !selectedConversation) return;
+
+    // Generate unique clientMessageId
+    const clientMessageId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const trimmedText = messageInput.trim();
+    const createdAt = new Date().toISOString();
+
+    // Create message object
+    const message: Message = {
+      clientMessageId,
       text: trimmedText,
       senderType: 'operator',
-      createdAt: new Date().toISOString(),
+      createdAt,
+      status: 'pending',
+      retryCount: 0,
     };
 
+    // Add to local messages immediately (optimistic update)
     setMessagesByConversation((prev) => {
       const existing = prev[selectedConversation] || [];
       return {
         ...prev,
-        [selectedConversation]: [...existing, optimisticMessage],
+        [selectedConversation]: [...existing, message],
       };
     });
+
+    // Add to pending
+    pendingMessagesRef.current.set(clientMessageId, message);
+
+    // Send to server
+    sendMessageToServer(message);
 
     setMessageInput('');
     

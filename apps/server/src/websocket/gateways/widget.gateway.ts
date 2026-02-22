@@ -53,6 +53,30 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       
       this.logger.log(`[TRACE] Token verified: channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
       
+      // Domain lock: validate origin against allowedDomains
+      const origin = client.handshake.headers.origin || client.handshake.headers.referer;
+      const originHost = origin ? new URL(origin).hostname : null;
+      
+      const channel = await this.prisma.channel.findUnique({
+        where: { id: payload.channelId },
+        select: { id: true, allowedDomains: true },
+      });
+      
+      if (channel) {
+        const allowedDomains = channel.allowedDomains as string[] | null;
+        const channelIdPrefix = channel.id.substring(0, 8);
+        
+        if (allowedDomains && allowedDomains.length > 0) {
+          if (!originHost || !allowedDomains.includes(originHost)) {
+            this.logger.warn(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... denied: origin=${originHost || 'missing'}, allowed=${allowedDomains.join(',')}`);
+            throw new WsException('DOMAIN_NOT_ALLOWED');
+          }
+          this.logger.log(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... allowed: origin=${originHost}`);
+        } else {
+          this.logger.warn(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... has no allowedDomains - allowing all origins (dev mode)`);
+        }
+      }
+      
       client.data.channelId = payload.channelId;
       client.data.visitorId = payload.visitorId;
       client.data.conversationId = payload.conversationId;
@@ -63,8 +87,14 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       this.logger.log(`Widget connected: ${client.id}, channel: ${payload.channelId}, conversation: ${payload.conversationId}`);
     } catch (error) {
-      this.logger.warn(`Widget connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
-      client.disconnect();
+      if (error instanceof WsException && error.message === 'DOMAIN_NOT_ALLOWED') {
+        this.logger.warn(`Widget connection rejected: domain not allowed, clientId=${client.id}`);
+        client.emit('error', { message: 'DOMAIN_NOT_ALLOWED' });
+        client.disconnect();
+      } else {
+        this.logger.warn(`Widget connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
+        client.disconnect();
+      }
     }
   }
 
@@ -78,15 +108,21 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { conversationId: socketConvId, visitorId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
 
-    // Проверка conversationId
-    if (conversationId !== socketConvId) {
+    // Validate conversationId (UUID format)
+    if (!conversationId || typeof conversationId !== 'string' || conversationId !== socketConvId) {
       client.emit('error', { message: 'Invalid conversationId' });
       return;
     }
 
-    // Валидация
-    if (!text || text.trim().length === 0 || text.length > 4000) {
+    // Validate text
+    if (!text || typeof text !== 'string' || text.trim().length === 0 || text.length > 4000) {
       client.emit('error', { message: 'Invalid text: must be 1-4000 chars' });
+      return;
+    }
+
+    // Validate clientMessageId (REQUIRED, non-empty string)
+    if (!clientMessageId || typeof clientMessageId !== 'string' || clientMessageId.trim().length === 0) {
+      client.emit('error', { message: 'clientMessageId is required and must be a non-empty string' });
       return;
     }
 
@@ -135,10 +171,11 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data: { updatedAt: new Date() },
     });
 
-    // ACK отправителю
+    // ACK отправителю (ONLY after successful DB persist)
     client.emit('message:ack', {
       clientMessageId,
       serverMessageId: message.id,
+      conversationId: message.conversationId,
       createdAt: message.createdAt.toISOString(),
     });
 
@@ -172,37 +209,55 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('sync:request')
-  async handleSync(client: Socket, payload: { conversationId: string; afterCreatedAt?: string; limit?: number }) {
+  async handleSyncRequest(client: Socket, payload: { conversationId: string; sinceCreatedAt?: string; limit?: number }) {
     const { conversationId: socketConvId } = client.data;
-    const { conversationId, afterCreatedAt, limit = 50 } = payload;
+    const { conversationId, sinceCreatedAt, limit = 100 } = payload;
 
-    if (conversationId !== socketConvId) {
+    if (!conversationId || conversationId !== socketConvId) {
       client.emit('error', { message: 'Invalid conversationId' });
       return;
     }
 
-    const take = Math.min(Math.max(limit, 1), 200);
-    const where: any = { conversationId };
+    try {
+      const where: any = { conversationId };
+      if (sinceCreatedAt) {
+        const sinceDate = new Date(sinceCreatedAt);
+        if (!isNaN(sinceDate.getTime())) {
+          where.createdAt = { gt: sinceDate };
+        }
+      }
 
-    if (afterCreatedAt) {
-      where.createdAt = { gt: new Date(afterCreatedAt) };
+      const messages = await this.prisma.message.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        take: Math.min(limit || 100, 200), // Cap at 200
+        select: {
+          id: true,
+          conversationId: true,
+          text: true,
+          senderType: true,
+          senderId: true,
+          clientMessageId: true,
+          createdAt: true,
+        },
+      });
+
+      client.emit('sync:response', {
+        conversationId,
+        messages: messages.map((m) => ({
+          serverMessageId: m.id,
+          conversationId: m.conversationId,
+          text: m.text,
+          senderType: m.senderType,
+          senderId: m.senderId,
+          clientMessageId: m.clientMessageId,
+          createdAt: m.createdAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      this.logger.error(`Sync request failed: ${error instanceof Error ? error.message : 'unknown'}`, error instanceof Error ? error.stack : undefined);
+      client.emit('error', { message: 'Sync request failed' });
     }
-
-    const messages = await this.prisma.message.findMany({
-      where,
-      orderBy: { createdAt: 'asc' },
-      take,
-    });
-
-    client.emit('sync:response', {
-      messages: messages.map((m) => ({
-        serverMessageId: m.id,
-        conversationId: m.conversationId,
-        text: m.text,
-        senderType: m.senderType,
-        createdAt: m.createdAt.toISOString(),
-      })),
-    });
   }
 
   @SubscribeMessage('presence:heartbeat')

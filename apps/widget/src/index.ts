@@ -12,6 +12,8 @@ interface ChatMessage {
   senderType: 'visitor' | 'operator';
   createdAt: string;
   delivered?: boolean;
+  status?: 'pending' | 'sent' | 'failed';
+  retryCount?: number;
 }
 
 class SiteAccessChatWidget {
@@ -21,9 +23,14 @@ class SiteAccessChatWidget {
   private conversationId: string | null = null;
   private visitorSessionToken: string | null = null;
   private messages: ChatMessage[] = [];
+  private pendingMessages: Map<string, ChatMessage> = new Map(); // clientMessageId -> message
+  private retryTimers: Map<string, NodeJS.Timeout> = new Map(); // clientMessageId -> timer
+  private lastSeenCreatedAt: string | null = null; // For sync after reconnect
   private isOpen = false;
   private presenceInterval: NodeJS.Timeout | null = null;
   private apiBase: string = 'https://online.siteaccess.ru';
+  private maxRetries = 5;
+  private retryDelays = [3000, 6000, 12000, 24000, 48000]; // Exponential backoff in ms
 
   private container: HTMLElement | null = null;
   private button: HTMLElement | null = null;
@@ -60,6 +67,10 @@ class SiteAccessChatWidget {
     if (persistedConversationId) {
       this.conversationId = persistedConversationId;
     }
+
+    // Load pending messages and lastSeenCreatedAt
+    this.loadPendingMessages();
+    this.loadLastSeenCreatedAt();
 
     // Send ping to verify installation
     this.sendPing();
@@ -312,17 +323,55 @@ class SiteAccessChatWidget {
       this.socket.on('connect', () => {
         console.log('Widget connected');
         this.startPresenceHeartbeat();
+        // Resend pending messages on reconnect
+        this.resendPendingMessages();
+        // Sync missed messages
+        this.requestSync();
         // Load history via REST API (not WS)
         this.loadHistory();
       });
 
       this.socket.on('message:ack', (data: any) => {
+        // Find message by clientMessageId (must be non-empty)
+        if (!data.clientMessageId) {
+          console.warn('message:ack received without clientMessageId');
+          return;
+        }
+        
+        // Remove from pending
+        const pendingMsg = this.pendingMessages.get(data.clientMessageId);
+        if (pendingMsg) {
+          this.pendingMessages.delete(data.clientMessageId);
+          // Clear retry timer
+          const timer = this.retryTimers.get(data.clientMessageId);
+          if (timer) {
+            clearTimeout(timer);
+            this.retryTimers.delete(data.clientMessageId);
+          }
+          this.savePendingMessages();
+        }
+        
+        // Update message in UI
         const msg = this.messages.find((m) => m.clientMessageId === data.clientMessageId);
         if (msg) {
           msg.delivered = true;
-          msg.serverMessageId = data.serverMessageId;
+          msg.status = 'sent';
+          if (data.serverMessageId) {
+            msg.serverMessageId = data.serverMessageId;
+          }
+          // Update lastSeenCreatedAt
+          if (data.createdAt) {
+            this.lastSeenCreatedAt = data.createdAt;
+            this.saveLastSeenCreatedAt();
+          }
+          // Re-sort after updating serverMessageId
+          this.messages.sort((a, b) => 
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          this.renderMessages();
+        } else {
+          console.warn(`message:ack received for unknown clientMessageId: ${data.clientMessageId}`);
         }
-        this.renderMessages();
       });
 
       this.socket.on('message:new', (data: any) => {
@@ -349,13 +398,61 @@ class SiteAccessChatWidget {
             text: data.text,
             senderType: data.senderType,
             createdAt: data.createdAt,
+            delivered: true,
+            status: 'sent',
           });
+          // Update lastSeenCreatedAt
+          if (data.createdAt && (!this.lastSeenCreatedAt || data.createdAt > this.lastSeenCreatedAt)) {
+            this.lastSeenCreatedAt = data.createdAt;
+            this.saveLastSeenCreatedAt();
+          }
           // Sort by createdAt to maintain chronological order
           this.messages.sort((a, b) => 
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
           this.renderMessages();
         }
+      });
+
+      this.socket.on('sync:response', (data: any) => {
+        if (!data.messages || !Array.isArray(data.messages)) return;
+
+        console.log(`Received ${data.messages.length} messages from sync`);
+        
+        // Merge sync messages with existing (deduplicate)
+        const existingIds = new Set(
+          this.messages
+            .map(m => m.serverMessageId || m.clientMessageId)
+            .filter(Boolean)
+        );
+
+        const newMessages = data.messages.filter((msg: any) => {
+          const id = msg.serverMessageId || msg.clientMessageId;
+          return id && !existingIds.has(id);
+        });
+
+        for (const msg of newMessages) {
+          this.messages.push({
+            serverMessageId: msg.serverMessageId,
+            clientMessageId: msg.clientMessageId,
+            text: msg.text,
+            senderType: msg.senderType,
+            createdAt: msg.createdAt,
+            delivered: true,
+            status: 'sent',
+          });
+          // Update lastSeenCreatedAt
+          if (msg.createdAt && (!this.lastSeenCreatedAt || msg.createdAt > this.lastSeenCreatedAt)) {
+            this.lastSeenCreatedAt = msg.createdAt;
+            this.saveLastSeenCreatedAt();
+          }
+        }
+
+        // Sort by createdAt
+        this.messages.sort((a, b) => 
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        this.renderMessages();
       });
 
     } catch (error) {
@@ -419,27 +516,166 @@ class SiteAccessChatWidget {
   }
 
   private sendMessage() {
-    if (!this.input || !this.socket || !this.conversationId) return;
+    if (!this.input || !this.conversationId) return;
 
     const text = this.input.value.trim();
     if (!text) return;
 
+    // Generate unique clientMessageId (always unique per message)
     const clientMessageId = this.generateUUID();
-    this.messages.push({
+    const createdAt = new Date().toISOString();
+    
+    // Create message object
+    const message: ChatMessage = {
       clientMessageId,
       text,
       senderType: 'visitor',
-      createdAt: new Date().toISOString(),
+      createdAt,
       delivered: false,
-    });
+      status: 'pending',
+      retryCount: 0,
+    };
+    
+    // Add to messages array (optimistic UI update)
+    this.messages.push(message);
+    
+    // Sort by createdAt
+    this.messages.sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    
     this.renderMessages();
     this.input.value = '';
 
+    // Add to pending and send
+    this.pendingMessages.set(clientMessageId, message);
+    this.savePendingMessages();
+    this.sendMessageToServer(message);
+  }
+
+  private sendMessageToServer(message: ChatMessage) {
+    if (!this.socket || !this.conversationId || !message.clientMessageId) return;
+
+    if (!this.socket.connected) {
+      console.warn('Socket not connected, message will be sent on reconnect');
+      return;
+    }
+
     this.socket.emit('message:send', {
       conversationId: this.conversationId,
-      text,
-      clientMessageId,
+      text: message.text,
+      clientMessageId: message.clientMessageId,
     });
+
+    // Start retry timer if no ACK received
+    this.scheduleRetry(message);
+  }
+
+  private scheduleRetry(message: ChatMessage) {
+    if (!message.clientMessageId) return;
+
+    const retryCount = message.retryCount || 0;
+    if (retryCount >= this.maxRetries) {
+      console.error(`Message ${message.clientMessageId} failed after ${retryCount} retries`);
+      message.status = 'failed';
+      this.renderMessages();
+      return;
+    }
+
+    const delay = this.retryDelays[Math.min(retryCount, this.retryDelays.length - 1)];
+    
+    const timer = setTimeout(() => {
+      if (this.pendingMessages.has(message.clientMessageId!)) {
+        message.retryCount = (message.retryCount || 0) + 1;
+        console.log(`Retrying message ${message.clientMessageId} (attempt ${message.retryCount})`);
+        this.sendMessageToServer(message);
+      }
+    }, delay);
+
+    this.retryTimers.set(message.clientMessageId, timer);
+  }
+
+  private resendPendingMessages() {
+    if (this.pendingMessages.size === 0) return;
+
+    console.log(`Resending ${this.pendingMessages.size} pending messages`);
+    for (const [clientMessageId, message] of this.pendingMessages.entries()) {
+      // Reset retry count on reconnect
+      message.retryCount = 0;
+      this.sendMessageToServer(message);
+    }
+  }
+
+  private requestSync() {
+    if (!this.socket || !this.conversationId || !this.socket.connected) return;
+
+    const sinceCreatedAt = this.lastSeenCreatedAt || null;
+    console.log(`Requesting sync since: ${sinceCreatedAt || 'beginning'}`);
+
+    this.socket.emit('sync:request', {
+      conversationId: this.conversationId,
+      sinceCreatedAt,
+      limit: 100,
+    });
+  }
+
+  private savePendingMessages() {
+    if (!this.config?.token) return;
+    const tokenHash = this.hashToken(this.config.token);
+    const key = `sa_pendingMessages:${tokenHash.slice(0, 8)}`;
+    try {
+      const pending = Array.from(this.pendingMessages.values());
+      localStorage.setItem(key, JSON.stringify(pending));
+    } catch (e) {
+      console.warn('Failed to save pending messages', e);
+    }
+  }
+
+  private loadPendingMessages() {
+    if (!this.config?.token) return;
+    const tokenHash = this.hashToken(this.config.token);
+    const key = `sa_pendingMessages:${tokenHash.slice(0, 8)}`;
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const pending: ChatMessage[] = JSON.parse(stored);
+        for (const msg of pending) {
+          if (msg.clientMessageId && msg.status === 'pending') {
+            this.pendingMessages.set(msg.clientMessageId, msg);
+          }
+        }
+        localStorage.removeItem(key); // Clear after loading
+      }
+    } catch (e) {
+      console.warn('Failed to load pending messages', e);
+    }
+  }
+
+  private saveLastSeenCreatedAt() {
+    if (!this.config?.token) return;
+    const tokenHash = this.hashToken(this.config.token);
+    const key = `sa_lastSeenCreatedAt:${tokenHash.slice(0, 8)}`;
+    try {
+      if (this.lastSeenCreatedAt) {
+        localStorage.setItem(key, this.lastSeenCreatedAt);
+      }
+    } catch (e) {
+      console.warn('Failed to save lastSeenCreatedAt', e);
+    }
+  }
+
+  private loadLastSeenCreatedAt() {
+    if (!this.config?.token) return;
+    const tokenHash = this.hashToken(this.config.token);
+    const key = `sa_lastSeenCreatedAt:${tokenHash.slice(0, 8)}`;
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        this.lastSeenCreatedAt = stored;
+      }
+    } catch (e) {
+      console.warn('Failed to load lastSeenCreatedAt', e);
+    }
   }
 
   private renderMessages() {

@@ -151,10 +151,11 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       data: { updatedAt: new Date() },
     });
 
-    // ACK to sender
+    // ACK to sender (ONLY after successful DB persist)
     client.emit('message:ack', {
       clientMessageId,
       serverMessageId: message.id,
+      conversationId: message.conversationId,
       createdAt: message.createdAt.toISOString(),
     });
 
@@ -218,5 +219,68 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     client.join(`conversation:${conversationId}`);
     this.logger.log(`[REALTIME] Operator ${userId} joined conversation:${conversationId}`);
     client.emit('operator:conversation:joined', { conversationId });
+  }
+
+  @SubscribeMessage('sync:request')
+  async handleSyncRequest(client: Socket, payload: { conversationId: string; sinceCreatedAt?: string; limit?: number }) {
+    const { channelId, userId } = client.data;
+    const { conversationId, sinceCreatedAt, limit = 100 } = payload;
+
+    if (!conversationId || typeof conversationId !== 'string') {
+      client.emit('error', { message: 'Invalid conversationId' });
+      return;
+    }
+
+    // Validate conversation belongs to channel
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, channelId: true },
+    });
+
+    if (!conversation || conversation.channelId !== channelId) {
+      client.emit('error', { message: 'Invalid conversationId' });
+      return;
+    }
+
+    try {
+      const where: any = { conversationId };
+      if (sinceCreatedAt) {
+        const sinceDate = new Date(sinceCreatedAt);
+        if (!isNaN(sinceDate.getTime())) {
+          where.createdAt = { gt: sinceDate };
+        }
+      }
+
+      const messages = await this.prisma.message.findMany({
+        where,
+        orderBy: { createdAt: 'asc' },
+        take: Math.min(limit || 100, 200), // Cap at 200
+        select: {
+          id: true,
+          conversationId: true,
+          text: true,
+          senderType: true,
+          senderId: true,
+          clientMessageId: true,
+          createdAt: true,
+        },
+      });
+
+      client.emit('sync:response', {
+        conversationId,
+        messages: messages.map((m) => ({
+          serverMessageId: m.id,
+          conversationId: m.conversationId,
+          text: m.text,
+          senderType: m.senderType,
+          senderId: m.senderId,
+          clientMessageId: m.clientMessageId,
+          createdAt: m.createdAt.toISOString(),
+        })),
+      });
+    } catch (error) {
+      this.logger.error(`Sync request failed: ${error instanceof Error ? error.message : 'unknown'}`, error instanceof Error ? error.stack : undefined);
+      client.emit('error', { message: 'Sync request failed' });
+    }
   }
 }
