@@ -1,4 +1,5 @@
 import {
+import { WsException } from " @nestjs/websockets;
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
