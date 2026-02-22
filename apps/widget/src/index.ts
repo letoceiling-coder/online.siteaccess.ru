@@ -327,10 +327,20 @@ class SiteAccessChatWidget {
 
       this.socket.on('message:new', (data: any) => {
         // Deduplicate: check if message already exists
-        const existing = this.messages.find(
-          m => m.serverMessageId === data.serverMessageId || 
-               m.clientMessageId === data.clientMessageId
-        );
+        // Prefer serverMessageId when present, only use clientMessageId if it's a non-empty string
+        const existing = this.messages.find((m) => {
+          // If both have serverMessageId, compare by that
+          if (m.serverMessageId && data.serverMessageId) {
+            return m.serverMessageId === data.serverMessageId;
+          }
+          // If both have clientMessageId (non-empty), compare by that
+          if (m.clientMessageId && data.clientMessageId && 
+              m.clientMessageId !== '' && data.clientMessageId !== '') {
+            return m.clientMessageId === data.clientMessageId;
+          }
+          // If one has serverMessageId and other has clientMessageId, they're different
+          return false;
+        });
         
         if (!existing) {
           this.messages.push({
@@ -340,6 +350,10 @@ class SiteAccessChatWidget {
             senderType: data.senderType,
             createdAt: data.createdAt,
           });
+          // Sort by createdAt to maintain chronological order
+          this.messages.sort((a, b) => 
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
           this.renderMessages();
         }
       });
