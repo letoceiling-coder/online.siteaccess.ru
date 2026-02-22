@@ -15,8 +15,8 @@ if (!SMOKE_KEY) {
 }
 
 const endpoint = `${BASE_URL}/api/_smoke/throttle`;
-const numRequests = 70;
-const delay = 10; // ms between requests
+const numRequests = 110; // Send more than the 100/min limit
+const delay = 5; // ms between requests (faster)
 
 console.log(`=== Throttle Smoke Test ===`);
 console.log(`Endpoint: ${endpoint}`);
