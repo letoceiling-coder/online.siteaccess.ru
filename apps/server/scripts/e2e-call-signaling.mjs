@@ -186,9 +186,13 @@ async function runE2E() {
 
     const session = await sessionRes.json();
     const conversationId = session.conversationId;
-    const channelId = session.channelId;
-    const widgetTokenJWT = session.token;
-    console.log(`✓ Widget session created: conversationId=${conversationId.substring(0, 8)}...\n`);
+    const widgetTokenJWT = session.visitorSessionToken || session.token;
+    
+    // Get channelId from operator login response or from project
+    let channelId = projectId; // channelId is the same as projectId
+    
+    console.log(`✓ Widget session created: conversationId=${conversationId.substring(0, 8)}...`);
+    console.log(`  channelId=${channelId.substring(0, 8)}...\n`);
 
     // 7) Connect sockets
     console.log('[7] Connecting sockets...');
@@ -206,12 +210,24 @@ async function runE2E() {
     await Promise.all([
       new Promise((resolve, reject) => {
         widgetSocket.on('connect', resolve);
-        widgetSocket.on('connect_error', reject);
+        widgetSocket.on('connect_error', (err) => {
+          console.log(`  Widget connect_error: ${JSON.stringify(err)}`);
+          reject(err);
+        });
+        widgetSocket.on('disconnect', (reason) => {
+          console.log(`  Widget disconnected: ${reason}`);
+        });
         setTimeout(() => reject(new Error('Widget socket timeout')), 5000);
       }),
       new Promise((resolve, reject) => {
         operatorSocket.on('connect', resolve);
-        operatorSocket.on('connect_error', reject);
+        operatorSocket.on('connect_error', (err) => {
+          console.log(`  Operator connect_error: ${JSON.stringify(err)}`);
+          reject(err);
+        });
+        operatorSocket.on('disconnect', (reason) => {
+          console.log(`  Operator disconnected: ${reason}`);
+        });
         setTimeout(() => reject(new Error('Operator socket timeout')), 5000);
       }),
     ]);
@@ -219,12 +235,28 @@ async function runE2E() {
     console.log('  ✓ Widget socket connected');
     console.log('  ✓ Operator socket connected\n');
 
-    // Wait for rooms to be joined, then join conversation room
-    await sleep(500);
+    // Wait for rooms to be joined
+    // Note: operator is already in channel room from connection
+    // Widget is in conversation room from connection
+    await sleep(2000);
     
-    // Join conversation room (required for operator to receive events)
-    operatorSocket.emit('operator:conversation:join', { conversationId });
-    await sleep(500);
+    // Verify sockets are still connected
+    console.log(`  Socket status check: widget=${widgetSocket.connected}, operator=${operatorSocket.connected}`);
+    if (!widgetSocket.connected) {
+      throw new Error('Widget socket disconnected');
+    }
+    if (!operatorSocket.connected) {
+      console.log('  ⚠️  Operator socket disconnected, but continuing test...');
+      // Try to reconnect
+      operatorSocket.connect();
+      await new Promise((resolve) => {
+        operatorSocket.on('connect', resolve);
+        setTimeout(() => resolve(), 2000);
+      });
+      if (!operatorSocket.connected) {
+        throw new Error('Operator socket failed to reconnect');
+      }
+    }
 
     // 8) Signaling flow
     console.log('[8] Starting signaling flow...');
