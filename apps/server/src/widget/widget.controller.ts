@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Headers, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Headers, Query, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { WidgetService } from './widget.service';
 import { WidgetSessionDto } from './dto/widget-session.dto';
