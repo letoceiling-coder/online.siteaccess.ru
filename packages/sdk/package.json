@@ -14,8 +14,8 @@
     }
   },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
     "lint": "eslint . --ext .ts",
     "test": "vitest",
     "typecheck": "tsc --noEmit",
