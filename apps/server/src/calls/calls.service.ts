@@ -15,7 +15,7 @@ export class CallsService {
     createdByRole: 'operator' | 'visitor';
     createdById?: string;
   }) {
-    return this.prisma.callRecord.create({
+    return (this.prisma as any).callRecord.create({
       data: {
         id: data.callId,
         channelId: data.channelId,
