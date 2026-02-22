@@ -270,6 +270,8 @@ class SiteAccessChatWidget {
   private async togglePanel() {
     if (!this.isOpen) {
       await this.connect();
+      // Load history when opening panel (even if we have persisted conversationId)
+      await this.loadHistory();
     }
     this.isOpen = !this.isOpen;
     if (this.panel) {
