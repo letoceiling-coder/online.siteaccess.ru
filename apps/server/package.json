@@ -23,7 +23,16 @@
     "smoke:sound": "node scripts/smoke-sound.mjs",
     "e2e:widget:history": "node scripts/e2e-widget-history.mjs",
     "smoke:widget:domain": "node scripts/smoke-widget-domain-lock.mjs",
-    "smoke:widget:ping": "node scripts/smoke-widget-ping.mjs"
+    "smoke:widget:ping": "node scripts/smoke-widget-ping.mjs",
+    "smoke:widget:session:stable": "node scripts/smoke-widget-session-stable.mjs",
+    "e2e:history:parity": "node scripts/e2e-history-parity.mjs",
+    "e2e:widget:realtime": "node scripts/e2e-widget-realtime-append.mjs",
+    "e2e:reliable:messaging": "node scripts/e2e-reliable-messaging.mjs",
+    "e2e:reliable": "node scripts/e2e-reliable-messaging.mjs",
+    "smoke:sync": "node scripts/smoke-sync.mjs",
+    "smoke:calls:ice": "node scripts/smoke-calls-ice.mjs",
+    "db:proof:reliable": "node scripts/db-proof-reliable.mjs",
+    "e2e:calls:signaling": "node scripts/e2e-call-signaling.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
