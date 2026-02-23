@@ -117,10 +117,11 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  async handleDisconnect(client: Socket) {
-    // Note: reason is not provided by NestJS OnGatewayDisconnect interface
+  async handleDisconnect(client: Socket, reason?: string) {
+    // Note: reason is not provided by NestJS OnGatewayDisconnect interface in older versions
     // We log it from the disconnect event listener added in handleConnection
-    this.logger.log(`[WS_TRACE] [WIDGET] handleDisconnect: socketId=${client.id}`);
+    const closeReason = (client as any).conn?.transport?.closeReason || reason || 'unknown';
+    this.logger.log(`[TRACE] [WIDGET] handleDisconnect: socketId=${client.id}, reason=${closeReason}`);
   }
 
   @SubscribeMessage('message:send')
@@ -128,31 +129,29 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { conversationId: socketConvId, visitorId, channelId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
     
-    // [W_MSG_SAVE] Log incoming message
+    // [TRACE] Log incoming message
     const clientMsgIdPrefix = clientMessageId ? clientMessageId.substring(0, 16) : 'missing';
-    this.logger.log(`[W_MSG_SAVE] Received: socketId=${client.id}, conversationId=${conversationId?.substring(0, 8)}..., clientMessageId=${clientMsgIdPrefix}..., textLength=${text?.length || 0}`);
-    this.logger.log(`[W_MSG_SAVE] Client data: channelId=${channelId?.substring(0, 8) || 'missing'}..., conversationId=${socketConvId?.substring(0, 8) || 'missing'}..., visitorId=${visitorId?.substring(0, 8) || 'missing'}...`);
+    this.logger.log(`[TRACE] [WIDGET] message:send received: socketId=${client.id}, conversationId=${conversationId?.substring(0, 8)}..., clientMessageId=${clientMsgIdPrefix}..., textLength=${text?.length || 0}`);
+    this.logger.log(`[TRACE] [WIDGET] Client data: channelId=${channelId?.substring(0, 8) || 'missing'}..., conversationId=${socketConvId?.substring(0, 8) || 'missing'}..., visitorId=${visitorId?.substring(0, 8) || 'missing'}...`);
 
-    // Validate conversationId (UUID format)
-    if (!conversationId || typeof conversationId !== 'string' || conversationId !== socketConvId) {
-      this.logger.warn(`[W_MSG_SAVE] Validation failed: conversationId mismatch, socketConvId=${socketConvId}, payloadConvId=${conversationId}`);
-      client.emit('error', { message: 'Invalid conversationId' });
-      return;
-    }
+    try {
+      // Validate conversationId (UUID format)
+      if (!conversationId || typeof conversationId !== 'string' || conversationId !== socketConvId) {
+        this.logger.warn(`[TRACE] [WIDGET] Validation failed: conversationId mismatch, socketConvId=${socketConvId}, payloadConvId=${conversationId}`);
+        return { ok: false, error: 'Invalid conversationId' };
+      }
 
-    // Validate text
-    if (!text || typeof text !== 'string' || text.trim().length === 0 || text.length > 4000) {
-      this.logger.warn(`[W_MSG_SAVE] Validation failed: invalid text, length=${text?.length || 0}`);
-      client.emit('error', { message: 'Invalid text: must be 1-4000 chars' });
-      return;
-    }
+      // Validate text
+      if (!text || typeof text !== 'string' || text.trim().length === 0 || text.length > 4000) {
+        this.logger.warn(`[TRACE] [WIDGET] Validation failed: invalid text, length=${text?.length || 0}`);
+        return { ok: false, error: 'Invalid text: must be 1-4000 chars' };
+      }
 
-    // Validate clientMessageId (REQUIRED, non-empty string)
-    if (!clientMessageId || typeof clientMessageId !== 'string' || clientMessageId.trim().length === 0) {
-      this.logger.warn(`[W_MSG_SAVE] Validation failed: clientMessageId missing or empty`);
-      client.emit('error', { message: 'clientMessageId is required and must be a non-empty string' });
-      return;
-    }
+      // Validate clientMessageId (REQUIRED, non-empty string)
+      if (!clientMessageId || typeof clientMessageId !== 'string' || clientMessageId.trim().length === 0) {
+        this.logger.warn(`[TRACE] [WIDGET] Validation failed: clientMessageId missing or empty`);
+        return { ok: false, error: 'clientMessageId is required and must be a non-empty string' };
+      }
 
     // Проверка дубликата (skip if clientMessageId column doesn't exist in DB)
     let existing = null;
@@ -169,22 +168,23 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.warn(`[W_MSG_SAVE] Duplicate check skipped: ${error instanceof Error ? error.message : 'unknown'}`);
     }
 
-    if (existing) {
-      this.logger.log(`[W_MSG_SAVE] Duplicate found: clientMessageId=${clientMsgIdPrefix}..., existingId=${existing.id}`);
-      client.emit('message:ack', {
-        clientMessageId,
-        serverMessageId: existing.id,
-        createdAt: existing.createdAt.toISOString(),
-      });
-      return;
-    }
+      if (existing) {
+        this.logger.log(`[TRACE] [WIDGET] Duplicate found: clientMessageId=${clientMsgIdPrefix}..., existingId=${existing.id}`);
+        const ackPayload = {
+          clientMessageId,
+          serverMessageId: existing.id,
+          createdAt: existing.createdAt.toISOString(),
+        };
+        client.emit('message:ack', ackPayload);
+        this.logger.log(`[TRACE] [WIDGET] ACK returned (duplicate): clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${existing.id}`);
+        return ackPayload;
+      }
 
-    // Создание сообщения (using Prisma)
-    const trimmedText = text.trim();
-    
-    let message;
-    try {
-      message = await this.prisma.message.create({
+      // Создание сообщения (using Prisma)
+      const trimmedText = text.trim();
+      
+      this.logger.log(`[TRACE] [WIDGET] Creating message in DB: clientMessageId=${clientMsgIdPrefix}...`);
+      const message = await this.prisma.message.create({
         data: {
           conversationId,
           senderType: 'visitor',
@@ -195,62 +195,65 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           // ciphertext is nullable, not set for plain text messages
         },
       });
-      this.logger.log(`[W_MSG_SAVE] Saved: messageId=${message.id}, clientMessageId=${clientMsgIdPrefix}..., conversationId=${conversationId?.substring(0, 8)}..., senderType=visitor`);
+      this.logger.log(`[TRACE] [WIDGET] Message saved: messageId=${message.id}, clientMessageId=${clientMsgIdPrefix}..., conversationId=${conversationId?.substring(0, 8)}..., senderType=visitor`);
+      
+      // Update conversation updatedAt
+      try {
+        await this.prisma.conversation.update({
+          where: { id: conversationId },
+          data: { updatedAt: new Date() },
+        });
+      } catch (error) {
+        this.logger.warn(`[TRACE] [WIDGET] Conversation updateAt update failed: ${error instanceof Error ? error.message : 'unknown'}`);
+        // Non-critical, continue
+      }
+
+      // ACK отправителю (ONLY after successful DB persist)
+      // CRITICAL: Return ACK object so Socket.IO can send it as response
+      const ackPayload = {
+        clientMessageId,
+        serverMessageId: message.id,
+        conversationId: message.conversationId,
+        createdAt: message.createdAt.toISOString(),
+      };
+      client.emit('message:ack', ackPayload);
+      this.logger.log(`[TRACE] [WIDGET] ACK returned: clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${message.id}`);
+
+      // Emit to both widget and operator namespaces for realtime delivery
+      const channelIdFromData = client.data.channelId;
+      const messagePayload = {
+        serverMessageId: message.id,
+        conversationId,
+        text: message.text,
+        senderType: 'visitor',
+        createdAt: message.createdAt.toISOString(),
+      };
+
+      // Emit to widget namespace (other widgets in same conversation)
+      this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
+
+      // Emit to operator namespace
+      // CRITICAL: Emit to BOTH channel room (all operators) AND conversation room (joined operators)
+      // Operators always join channel:{channelId} on connect, but only join conversation:{conversationId} when they open it
+      const mainServer = (this.server as any).server;
+      if (mainServer) {
+        const operatorNamespace = mainServer.of('/operator');
+        if (operatorNamespace && channelId) {
+          // Emit to channel room (MANDATORY - all operators in channel receive this)
+          operatorNamespace.to(`channel:${channelId}`).emit('message:new', messagePayload);
+          // Also emit to conversation room (for operators who have explicitly joined)
+          operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
+          this.logger.log(`[TRACE] [WIDGET] Emitted message:new to operator namespace: channel:${channelId} and conversation:${conversationId}`);
+        }
+      }
+
+      this.logger.log(`[TRACE] [WIDGET] message:send success: clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${message.id}`);
+      return ackPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
-      const errorCode = (error as any)?.code;
       const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`[W_MSG_SAVE] Prisma create failed: clientMessageId=${clientMsgIdPrefix}..., error=${errorMessage}, code=${errorCode || 'N/A'}${errorStack ? `, stack=${errorStack.substring(0, 400)}` : ''}`);
-      client.emit('error', { message: 'Failed to save message' });
-      return;
-    }
-    
-    // Update conversation updatedAt
-    try {
-      await this.prisma.conversation.update({
-        where: { id: conversationId },
-        data: { updatedAt: new Date() },
-      });
-    } catch (error) {
-      this.logger.warn(`[W_MSG_SAVE] Conversation updateAt update failed: ${error instanceof Error ? error.message : 'unknown'}`);
-      // Non-critical, continue
-    }
-
-    // ACK отправителю (ONLY after successful DB persist)
-    client.emit('message:ack', {
-      clientMessageId,
-      serverMessageId: message.id,
-      conversationId: message.conversationId,
-      createdAt: message.createdAt.toISOString(),
-    });
-    this.logger.log(`[W_MSG_SAVE] ACK sent: clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${message.id}`);
-
-    // Emit to both widget and operator namespaces for realtime delivery
-    const channelIdFromData = client.data.channelId;
-    const messagePayload = {
-      serverMessageId: message.id,
-      conversationId,
-      text: message.text,
-      senderType: 'visitor',
-      createdAt: message.createdAt.toISOString(),
-    };
-
-    // Emit to widget namespace (other widgets in same conversation)
-    this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
-
-    // Emit to operator namespace
-    // CRITICAL: Emit to BOTH channel room (all operators) AND conversation room (joined operators)
-    // Operators always join channel:{channelId} on connect, but only join conversation:{conversationId} when they open it
-    const mainServer = (this.server as any).server;
-    if (mainServer) {
-      const operatorNamespace = mainServer.of('/operator');
-      if (operatorNamespace && channelId) {
-        // Emit to channel room (MANDATORY - all operators in channel receive this)
-        operatorNamespace.to(`channel:${channelId}`).emit('message:new', messagePayload);
-        // Also emit to conversation room (for operators who have explicitly joined)
-        operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
-        this.logger.log(`[REALTIME] Emitted message:new to operator namespace: channel:${channelId} and conversation:${conversationId}`);
-      }
+      this.logger.error(`[TRACE] [WIDGET] message:send error: clientMessageId=${clientMsgIdPrefix}..., error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 400)}` : ''}`);
+      return { ok: false, error: errorMessage };
     }
   }
 
@@ -348,51 +351,73 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('call:offer')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleCallOffer(client: Socket, payload: any) {
-    this.logger.log(`[CALL_TRACE] Widget received call:offer: callId=${payload?.callId}, conversationId=${payload?.conversationId}`);
+    this.logger.log(`[TRACE] [WIDGET] call:offer received: callId=${payload?.callId}, conversationId=${payload?.conversationId}`);
     try {
       const dto = payload as CallOfferDto;
       await this.callsGateway.handleCallOffer(dto, client, 'visitor', '/widget', this.server);
-      this.logger.log(`[CALL_TRACE] Widget call offer processed: callId=${dto.callId}`);
+      this.logger.log(`[TRACE] [WIDGET] call:offer success: callId=${dto.callId}`);
+      return { ok: true, callId: dto.callId };
     } catch (error) {
-      this.logger.error(`[CALL_TRACE] Widget call offer error: ${error instanceof Error ? error.message : 'unknown'}, callId=${payload?.callId}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(`[TRACE] [WIDGET] call:offer error: callId=${payload?.callId}, error=${errorMessage}`);
       client.emit('call:failed', { callId: payload?.callId, reason: 'offer_failed' });
+      return { ok: false, error: errorMessage };
     }
   }
 
   @SubscribeMessage('call:answer')
   async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
-    this.logger.log(`[CALL_TRACE] Widget received call:answer: callId=${payload?.callId}`);
+    this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallAnswer(payload, client, '/widget', this.server);
+      this.logger.log(`[TRACE] [WIDGET] call:answer success: callId=${payload?.callId}`);
+      return { ok: true, callId: payload?.callId };
     } catch (error) {
-      this.logger.error(`[CALL_TRACE] Widget call answer error: ${error instanceof Error ? error.message : 'unknown'}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(`[TRACE] [WIDGET] call:answer error: callId=${payload?.callId}, error=${errorMessage}`);
+      return { ok: false, error: errorMessage };
     }
   }
 
   @SubscribeMessage('call:ice')
   async handleCallIce(client: Socket, payload: CallIceDto) {
+    this.logger.log(`[TRACE] [WIDGET] call:ice received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallIce(payload, client, '/widget', this.server);
+      this.logger.log(`[TRACE] [WIDGET] call:ice success: callId=${payload?.callId}`);
+      return { ok: true, callId: payload?.callId };
     } catch (error) {
-      this.logger.error(`[CALL_TRACE] Widget call ICE error: ${error instanceof Error ? error.message : 'unknown'}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(`[TRACE] [WIDGET] call:ice error: callId=${payload?.callId}, error=${errorMessage}`);
+      return { ok: false, error: errorMessage };
     }
   }
 
   @SubscribeMessage('call:hangup')
   async handleCallHangup(client: Socket, payload: CallHangupDto) {
+    this.logger.log(`[TRACE] [WIDGET] call:hangup received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallHangup(payload, client, '/widget', this.server);
+      this.logger.log(`[TRACE] [WIDGET] call:hangup success: callId=${payload?.callId}`);
+      return { ok: true, callId: payload?.callId };
     } catch (error) {
-      this.logger.error(`[CALL_TRACE] Widget call hangup error: ${error instanceof Error ? error.message : 'unknown'}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(`[TRACE] [WIDGET] call:hangup error: callId=${payload?.callId}, error=${errorMessage}`);
+      return { ok: false, error: errorMessage };
     }
   }
 
   @SubscribeMessage('call:busy')
   async handleCallBusy(client: Socket, payload: CallHangupDto) {
+    this.logger.log(`[TRACE] [WIDGET] call:busy received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallBusy(payload, client, '/widget', this.server);
+      this.logger.log(`[TRACE] [WIDGET] call:busy success: callId=${payload?.callId}`);
+      return { ok: true, callId: payload?.callId };
     } catch (error) {
-      this.logger.error(`[CALL_TRACE] Widget call busy error: ${error instanceof Error ? error.message : 'unknown'}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error(`[TRACE] [WIDGET] call:busy error: callId=${payload?.callId}, error=${errorMessage}`);
+      return { ok: false, error: errorMessage };
     }
   }
 }

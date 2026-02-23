@@ -17,17 +17,18 @@ export class OperatorAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
     
-    // [OP_WS_TRACE] Guard activation (only for @SubscribeMessage, not handleConnection)
+    // [GUARD TRACE] Guard activation (only for @SubscribeMessage, not handleConnection)
     // Check if this is a connection event - if so, skip guard (connection is handled in handleConnection)
     const handler = context.getHandler();
     const handlerName = handler?.name || 'unknown';
     if (handlerName === 'handleConnection' || handlerName === 'handleDisconnect') {
       // Guard should not run on connection/disconnect - these are handled in gateway
+      this.logger.log(`[GUARD TRACE] [OP] Skipping guard for connection/disconnect: handler=${handlerName}`);
       return true;
     }
     
     const eventName = context.switchToWs().getData()?.event || handlerName;
-    this.logger.log(`[OP_WS_TRACE] Guard canActivate: socketId=${client.id}, event=${eventName}, handler=${handlerName}`);
+    this.logger.log(`[GUARD TRACE] [OP] canActivate: socketId=${client.id}, event=${eventName}, handler=${handlerName}`);
     
     const devMode = this.config.get('OPERATOR_DEV_MODE') === 'true';
     const devToken = this.config.get('OPERATOR_DEV_TOKEN');
@@ -48,8 +49,10 @@ export class OperatorAuthGuard implements CanActivate {
     const token = client.handshake.auth?.token || client.handshake.query?.token;
 
     if (!token || typeof token !== 'string') {
-      this.logger.warn(`[OP_WS_TRACE] Guard auth failed: no token, clientId=${client.id}, event=${eventName}`);
-      throw new UnauthorizedException('Token required');
+      this.logger.warn(`[GUARD TRACE] [OP] Auth failed: no token, clientId=${client.id}, event=${eventName}`);
+      // CRITICAL: Return false instead of throwing to avoid disconnect
+      // Socket.IO will handle the rejection gracefully
+      return false;
     }
 
     // Log token prefix (first 8 chars) for debugging
@@ -72,20 +75,22 @@ export class OperatorAuthGuard implements CanActivate {
       });
 
       if (!membership) {
-        this.logger.warn(`[OP_WS_TRACE] Guard auth failed: membership not found, clientId=${client.id}, event=${eventName}`);
-        throw new UnauthorizedException('Membership not found');
+        this.logger.warn(`[GUARD TRACE] [OP] Auth failed: membership not found, clientId=${client.id}, event=${eventName}`);
+        // CRITICAL: Return false instead of throwing to avoid disconnect
+        return false;
       }
 
       client.data.userId = payload.userId;
       client.data.channelId = payload.channelId;
       client.data.role = payload.role;
-      this.logger.log(`[OP_WS_TRACE] Guard auth success: clientId=${client.id}, event=${eventName}, userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
+      this.logger.log(`[GUARD TRACE] [OP] Auth success: clientId=${client.id}, event=${eventName}, userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
       return true;
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`[OP_WS_TRACE] Guard auth failed: clientId=${client.id}, event=${eventName}, error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
-      throw new UnauthorizedException('Invalid token');
+      this.logger.error(`[GUARD TRACE] [OP] Auth failed: clientId=${client.id}, event=${eventName}, error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
+      // CRITICAL: Return false instead of throwing to avoid disconnect
+      return false;
     }
   }
 }

@@ -15,13 +15,16 @@ export class WidgetAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
+    const handler = context.getHandler();
+    const handlerName = handler?.name || 'unknown';
+    const eventName = context.switchToWs().getData()?.event || handlerName;
 
-    // TRACE: Log available token sources
+    // [GUARD TRACE] Log available token sources
     const authKeys = client.handshake.auth ? Object.keys(client.handshake.auth) : [];
     const queryKeys = client.handshake.query ? Object.keys(client.handshake.query) : [];
     const authHeader = client.handshake.headers?.authorization;
 
-    this.logger.log(`[TRACE] Auth attempt: authKeys=[${authKeys.join(',')}], queryKeys=[${queryKeys.join(',')}], hasAuthHeader=${!!authHeader}`);
+    this.logger.log(`[GUARD TRACE] [WIDGET] canActivate: socketId=${client.id}, event=${eventName}, handler=${handlerName}, authKeys=[${authKeys.join(',')}], queryKeys=[${queryKeys.join(',')}], hasAuthHeader=${!!authHeader}`);
 
     // Try multiple token sources
     let token: string | undefined;
@@ -43,8 +46,9 @@ export class WidgetAuthGuard implements CanActivate {
     }
 
     if (!token || typeof token !== 'string') {
-      this.logger.warn(`[TRACE] Token not found in any source`);
-      throw new WsException('UNAUTHORIZED');
+      this.logger.warn(`[GUARD TRACE] [WIDGET] Token not found in any source, socketId=${client.id}, event=${eventName}`);
+      // CRITICAL: Return false instead of throwing to avoid disconnect
+      return false;
     }
 
     // Log token prefix only (no secrets)
@@ -71,11 +75,13 @@ export class WidgetAuthGuard implements CanActivate {
         client.join(`conversation:${payload.conversationId}`);
       }
 
-      this.logger.log(`[TRACE] Auth SUCCESS: clientId=${client.id}, channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
+      this.logger.log(`[GUARD TRACE] [WIDGET] Auth SUCCESS: clientId=${client.id}, event=${eventName}, channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
       return true;
     } catch (error) {
-      this.logger.warn(`[TRACE] Token verification failed: ${error instanceof Error ? error.message : 'unknown error'}`);
-      throw new WsException('UNAUTHORIZED');
+      const errorMessage = error instanceof Error ? error.message : 'unknown error';
+      this.logger.warn(`[GUARD TRACE] [WIDGET] Token verification failed: socketId=${client.id}, event=${eventName}, error=${errorMessage}`);
+      // CRITICAL: Return false instead of throwing to avoid disconnect
+      return false;
     }
   }
 }
