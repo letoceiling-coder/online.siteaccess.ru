@@ -22,7 +22,6 @@ import { CallHangupDto } from '../../calls/dto/call-hangup.dto';
   namespace: '/widget',
   cors: { origin: true, credentials: true },
 })
-@UseGuards(WidgetAuthGuard)
 @UsePipes(new ValidationPipe())
 @Injectable()
 export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -208,7 +207,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('message:send')
-  @UseGuards(WidgetAuthGuard)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
     const { conversationId: socketConvId, visitorId, channelId } = client.data;
@@ -463,7 +461,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('call:answer')
-  @UseGuards(WidgetAuthGuard)
     this.logger.log(`[CALL_ANSWER_ENTRY] ns=${client.nsp.name} socketId=${client.id} callId=${payload?.callId} conversationId=${payload?.conversationId}`);
     this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId}`);
     try {
