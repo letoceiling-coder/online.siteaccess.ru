@@ -115,8 +115,14 @@ export class CallsGateway {
         createdByRole: fromRole,
         createdById: fromRole === 'operator' ? userId : visitorId,
       });
-    } catch (error) {
-      this.logger.error(`Failed to create call record: ${error}`);
+    } catch (error: any) {
+      const errorCode = error?.code || 'unknown';
+      const errorMessage = error?.message || String(error);
+      const errorMeta = error?.meta ? JSON.stringify(error.meta) : 'none';
+      this.logger.error(`[CALL_CREATE_ERROR] Failed to create call record: code=${errorCode}, message=${errorMessage}, meta=${errorMeta}`);
+      if (error?.stack) {
+        this.logger.error(`[CALL_CREATE_ERROR] Stack: ${error.stack.substring(0, 500)}`);
+      }
       throw new WsException('Failed to create call record');
     }
 
