@@ -15,8 +15,9 @@
  */
 import { io } from 'socket.io-client';
 
-const API_URL = process.env.API_URL || 'https://online.siteaccess.ru';
-const WS_BASE = process.env.WS_BASE || 'https://online.siteaccess.ru';
+const BASE_URL = process.env.BASE_URL || process.env.API_URL || 'https://online.siteaccess.ru';
+const API_URL = BASE_URL;
+const WS_BASE = BASE_URL;
 
 async function runE2E() {
   console.log('=== E2E Test: Reliable Messaging ===\n');
@@ -183,12 +184,16 @@ async function runE2E() {
 
     // 5) Connect sockets
     console.log('\n[8] Connecting sockets...');
+    console.log(`[E2E] Connecting sockets to BASE_URL=${BASE_URL}`);
+    
     const widgetSocket = io(`${WS_BASE}/widget`, {
+      path: '/socket.io',
       auth: { token: visitorSessionToken },
       transports: ['websocket'],
     });
 
     const operatorSocket = io(`${WS_BASE}/operator`, {
+      path: '/socket.io',
       auth: { token: operatorAccessToken },
       transports: ['websocket'],
     });
@@ -325,6 +330,7 @@ async function runE2E() {
     
     // Reconnect widget
     const widgetSocket2 = io(`${WS_BASE}/widget`, {
+      path: '/socket.io',
       auth: { token: visitorSessionToken },
       transports: ['websocket'],
     });

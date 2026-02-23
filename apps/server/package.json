@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules",
     "smoke:health": "node scripts/smoke-health.mjs",
+    "smoke:ws:connect": "node scripts/smoke-ws-connect.mjs",
     "smoke:operator": "node scripts/smoke-operator-login.mjs",
     "smoke:operator:conversations": "node scripts/smoke-operator-conversations.mjs",
     "smoke:ws:widget": "node scripts/smoke-ws-widget-auth.mjs",

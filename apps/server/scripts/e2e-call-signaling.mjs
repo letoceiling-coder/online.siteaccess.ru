@@ -18,8 +18,9 @@
 import { io } from 'socket.io-client';
 import { PrismaClient } from '@prisma/client';
 
-const API_URL = process.env.API_URL || process.env.BASE_URL || 'https://online.siteaccess.ru';
-const WS_BASE = process.env.WS_BASE || 'https://online.siteaccess.ru';
+const BASE_URL = process.env.BASE_URL || process.env.API_URL || 'https://online.siteaccess.ru';
+const API_URL = BASE_URL;
+const WS_BASE = BASE_URL;
 
 let prisma = null;
 try {
@@ -197,7 +198,10 @@ async function runE2E() {
     // 7) Connect sockets
     console.log('[7] Connecting sockets...');
     
+    console.log(`[E2E] Connecting sockets to BASE_URL=${BASE_URL}`);
+    
     const widgetSocket = io(`${WS_BASE}/widget`, {
+      path: '/socket.io',
       auth: { token: widgetTokenJWT },
       transports: ['websocket'],
       reconnection: true,
@@ -206,6 +210,7 @@ async function runE2E() {
     });
 
     const operatorSocket = io(`${WS_BASE}/operator`, {
+      path: '/socket.io',
       auth: { token: operatorAccessToken },
       transports: ['websocket'],
       reconnection: true,
