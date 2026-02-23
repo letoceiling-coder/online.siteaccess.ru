@@ -486,7 +486,6 @@ async function runE2E() {
 
     console.log('\n✓✓✓ ALL TESTS PASSED ✓✓✓');
     console.log(`  - Total messages: ${widgetHistory.length}`);
-    console.log(`  - Unique clientMessageIds: ${uniqueClientIds.size}`);
     console.log(`  - Dropped message recovered: ✓`);
     console.log(`  - No duplicates: ✓`);
     process.exit(0);
