@@ -130,8 +130,8 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.forwardCallEvent('/widget', 'call:ring', ringPayload, conversationId, undefined, server);
-    this.forwardCallEvent('/operator', 'call:ring', ringPayload, conversationId, undefined, server);
+    this.forwardCallEvent('/widget', 'call:ring', ringPayload, dto.conversationId, undefined, server);
+    this.forwardCallEvent('/operator', 'call:ring', ringPayload, dto.conversationId, undefined, server);
 
     // Forward offer to both namespaces (excluding sender)
     const offerPayload = {
