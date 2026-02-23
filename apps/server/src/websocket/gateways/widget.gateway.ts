@@ -95,7 +95,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           // Invalid referer URL
       // Add packet logging middleware for widget socket
       client.use((packet, next) => {
-      this.logger.log([WIDGET_PACKET] socketId= event= namespace=\);
+        this.logger.log(`[WIDGET_PACKET] socketId=${client.id} event=${packet[0]} namespace=${client.nsp.name}`);
         next();
       });
         }
@@ -458,13 +458,15 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       this.logger.error(`[TRACE] [WIDGET] call:offer error: callId=${payload?.callId}, error=${errorMessage}`);
       client.emit('call:failed', { callId: payload?.callId, reason: 'offer_failed' });
-    this.logger.log([CALL_ANSWER_ENTRY] ns= socketId= callId= conversationId=\);
       return { ok: false, error: errorMessage };
     }
   }
 
   @SubscribeMessage('call:answer')
+  @UseGuards(WidgetAuthGuard)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
+    this.logger.log(`[CALL_ANSWER_ENTRY] ns=${client.nsp.name} socketId=${client.id} callId=${payload?.callId} conversationId=${payload?.conversationId}`);
     this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallAnswer(payload, client, '/widget', this.server);
