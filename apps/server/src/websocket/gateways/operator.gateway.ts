@@ -47,10 +47,18 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     const queryKeys = Object.keys(client.handshake.query || {});
     const headerKeys = Object.keys(client.handshake.headers || {});
     const origin = client.handshake.headers.origin || client.handshake.headers.referer || 'missing';
+    const authToken = client.handshake.auth?.token;
+    const queryToken = client.handshake.query?.token;
+    const headerAuth = client.handshake.headers.authorization;
     
     this.logger.log(`[OP_WS_TRACE] Connection start: socketId=${client.id}, authKeys=[${authKeys.join(',')}], queryKeys=[${queryKeys.join(',')}], headerKeys=[${headerKeys.slice(0, 10).join(',')}...], origin=${origin}`);
+    this.logger.log(`[OP_WS_TRACE] Token sources: auth.token=${!!authToken}, query.token=${!!queryToken}, headers.authorization=${!!headerAuth}`);
     
-    const token = client.handshake.auth?.token || client.handshake.query?.token;
+    // Try multiple token sources: auth.token, query.token, Authorization header
+    let token = authToken || queryToken;
+    if (!token && headerAuth && headerAuth.startsWith('Bearer ')) {
+      token = headerAuth.substring(7);
+    }
     
     if (!token || typeof token !== 'string') {
       this.logger.warn(`[OP_WS_TRACE] Connection rejected: no token, clientId=${client.id}`);
