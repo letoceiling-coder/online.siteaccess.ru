@@ -170,8 +170,12 @@ async function runE2E() {
       throw new Error(`Operator login failed: ${opLoginOperatorRes.status}`);
     }
 
-    const { accessToken: operatorAccessToken } = await opLoginOperatorRes.json();
-    console.log('✓ Operator access token obtained\n');
+    const opLoginOperatorData = await opLoginOperatorRes.json();
+    const operatorAccessToken = opLoginOperatorData.accessToken || opLoginOperatorData.operatorAccessToken;
+    if (!operatorAccessToken) {
+      throw new Error(`Operator access token not found in response: ${JSON.stringify(opLoginOperatorData)}`);
+    }
+    console.log(`✓ Operator access token obtained: ${operatorAccessToken.substring(0, 20)}...\n`);
 
     // 6) Create widget session
     console.log('[6] Creating widget session...');
