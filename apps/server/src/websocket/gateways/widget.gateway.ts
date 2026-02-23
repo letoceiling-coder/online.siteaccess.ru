@@ -125,6 +125,8 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('message:send')
+  @UseGuards(WidgetAuthGuard)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
     const { conversationId: socketConvId, visitorId, channelId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
