@@ -123,8 +123,10 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
-  async handleDisconnect(client: Socket, reason: string) {
-    this.logger.log(`[WS_TRACE] [OP] handleDisconnect: socketId=${client.id}, reason=${reason || 'unknown'}`);
+  async handleDisconnect(client: Socket) {
+    // Note: reason is not provided by NestJS OnGatewayDisconnect interface
+    // We log it from the disconnect event listener added in handleConnection
+    this.logger.log(`[WS_TRACE] [OP] handleDisconnect: socketId=${client.id}`);
   }
 
   @SubscribeMessage('message:send')
