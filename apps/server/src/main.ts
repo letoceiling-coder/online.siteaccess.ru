@@ -4,6 +4,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -11,20 +12,37 @@ async function bootstrap() {
     // This applies to all WebSocket gateways
   });
   
-  // Configure Socket.IO adapter with ping/pong settings
+  // Use IoAdapter to configure Socket.IO with ping/pong settings
   // This prevents premature disconnects behind proxies
-  const httpServer = app.getHttpServer();
-  const io = require('socket.io')(httpServer, {
-    pingInterval: 25000, // Send ping every 25 seconds
-    pingTimeout: 60000,  // Wait 60 seconds for pong before considering connection dead
-    transports: ['websocket', 'polling'], // Allow both, prefer websocket
-  });
+  // CRITICAL: Use IoAdapter instead of manual socket.io server creation
+  // to avoid "handleUpgrade called more than once" error
+  class SocketIOAdapter extends IoAdapter {
+    createIOServer(port: number, options?: any): any {
+      const server = super.createIOServer(port, {
+        ...options,
+        pingInterval: 25000, // Send ping every 25 seconds
+        pingTimeout: 60000,  // Wait 60 seconds for pong before considering connection dead
+        transports: ['websocket', 'polling'], // Allow both, prefer websocket
+      });
+      
+      // Apply error handler to engine
+      server.engine.on('connection_error', (err: Error) => {
+        const logger = new Logger('SocketIO');
+        logger.error(`[WS_TRACE] Engine connection error: ${err.message}${err.stack ? `, stack=${err.stack.substring(0, 200)}` : ''}`);
+      });
+      
+      return server;
+    }
+  }
   
-  // Apply to all namespaces
-  io.engine.on('connection_error', (err: Error) => {
-    const logger = new Logger('SocketIO');
-    logger.error(`[WS_TRACE] Engine connection error: ${err.message}${err.stack ? `, stack=${err.stack.substring(0, 200)}` : ''}`);
-  });
+  app.useWebSocketAdapter(new SocketIOAdapter(app));
+  
+  // Log upgrade listeners count to detect double-upgrade issues
+  const httpServer = app.getHttpServer();
+  const upgradeListeners = httpServer.listeners('upgrade').length;
+  const requestListeners = httpServer.listeners('request').length;
+  const logger = new Logger('Bootstrap');
+  logger.log(`[BOOT] upgradeListeners=${upgradeListeners} requestListeners=${requestListeners}`);
 
   // Global exception filter for logging all errors
   app.useGlobalFilters(new AllExceptionsFilter());
