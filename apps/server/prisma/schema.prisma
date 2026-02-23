@@ -45,6 +45,7 @@ model Channel {
   visitors      Visitor[]
   conversations Conversation[]
   members       ChannelMember[]
+  callRecords   CallRecord[]
 
   @@index([ownerUserId])
   @@map("channels")
