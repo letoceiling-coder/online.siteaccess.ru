@@ -168,6 +168,12 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const rooms = Array.from(client.rooms);
       this.logger.log(`[ROOMS_ON_CONNECT] ns=widget socketId=${client.id} rooms=[${rooms.join(', ')}]`);
       
+      // Add packet logging middleware for widget socket
+      client.use((packet, next) => {
+        this.logger.log(`[WIDGET_PACKET] socketId=${client.id} event=${packet[0]} namespace=${client.nsp.name}`);
+        next();
+      });
+      
       // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
       if (client.conn) {
         client.conn.on('close', (reason: string) => {
