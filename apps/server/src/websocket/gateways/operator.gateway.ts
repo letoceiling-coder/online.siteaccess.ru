@@ -117,6 +117,10 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       
       this.logger.log(`[OP_WS_TRACE] Connection success: clientId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., joined room: channel:${payload.channelId}`);
       
+      // Log rooms on connect
+      const rooms = Array.from(client.rooms);
+      this.logger.log(`[ROOMS_ON_CONNECT] ns=operator socketId=${client.id} rooms=[${rooms.join(', ')}]`);
+      
       // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
       if (client.conn) {
         client.conn.on('close', (reason: string) => {
