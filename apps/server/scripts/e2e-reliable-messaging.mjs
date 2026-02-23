@@ -461,19 +461,24 @@ async function runE2E() {
     console.log(`  ✓ Total messages: ${widgetHistory.length}`);
     console.log(`  ✓ Dropped message recovered: ${droppedMessageText.substring(0, 30)}...`);
 
-    // 9) Verify no duplicates by clientMessageId
-    const clientMessageIds = [...widgetHistory, ...operatorHistory]
-      .map(m => m.clientMessageId)
-      .filter(Boolean);
+    // 9) Verify no duplicates by clientMessageId within each history
+    // NOTE: widgetHistory and operatorHistory should contain the same messages (same conversation),
+    // so we check for duplicates WITHIN each array, not across them
+    const checkDuplicates = (history, name) => {
+      const clientMessageIds = history.map(m => m.clientMessageId).filter(Boolean);
+      const uniqueClientIds = new Set(clientMessageIds);
+      if (clientMessageIds.length !== uniqueClientIds.size) {
+        throw new Error(
+          `Duplicate clientMessageId found in ${name}: ${clientMessageIds.length} total, ${uniqueClientIds.size} unique`
+        );
+      }
+      return uniqueClientIds.size;
+    };
     
-    const uniqueClientIds = new Set(clientMessageIds);
-    if (clientMessageIds.length !== uniqueClientIds.size) {
-      throw new Error(
-        `Duplicate clientMessageId found: ${clientMessageIds.length} total, ${uniqueClientIds.size} unique`
-      );
-    }
-
-    console.log(`  ✓ No duplicates: ${uniqueClientIds.size} unique clientMessageIds`);
+    const widgetUnique = checkDuplicates(widgetHistory, 'widgetHistory');
+    const operatorUnique = checkDuplicates(operatorHistory, 'operatorHistory');
+    
+    console.log(`  ✓ No duplicates: widgetHistory=${widgetUnique} unique, operatorHistory=${operatorUnique} unique`);
 
     // Cleanup
     widgetSocket2.disconnect();
