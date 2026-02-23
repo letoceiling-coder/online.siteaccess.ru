@@ -77,6 +77,7 @@ model Conversation {
   channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
   visitor  Visitor  @relation(fields: [visitorId], references: [id], onDelete: Cascade)
   messages Message[]
+  callRecords CallRecord[]
 
   @@index([channelId])
   @@index([visitorId])
@@ -135,4 +136,28 @@ model ChannelMember {
   @@index([userId])
   @@index([channelId])
   @@map("channel_members")
+}
+
+model CallRecord {
+  id            String   @id @default(uuid())
+  channelId     String
+  conversationId String
+  kind          String   // 'audio' | 'video'
+  status        String   @default("ringing") // 'ringing' | 'connecting' | 'in_call' | 'ended' | 'failed' | 'busy'
+  createdByRole String   // 'operator' | 'visitor'
+  createdById   String?
+  startedAt     DateTime?
+  endedAt       DateTime?
+  endedReason   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  channel       Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([channelId])
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("call_records")
 }
