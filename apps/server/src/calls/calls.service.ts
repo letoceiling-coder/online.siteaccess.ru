@@ -15,17 +15,55 @@ export class CallsService {
     createdByRole: 'operator' | 'visitor';
     createdById?: string;
   }) {
-    return (this.prisma as any).callRecord.create({
-      data: {
-        id: data.callId,
-        channelId: data.channelId,
-        conversationId: data.conversationId,
-        kind: data.kind,
-        status: 'ringing',
-        createdByRole: data.createdByRole,
-        createdById: data.createdById,
-      },
+    // Log input data
+    this.logger.log(`[CALL_CREATE_INPUT] callId=${data.callId}, channelId=${data.channelId?.substring(0, 8)}..., conversationId=${data.conversationId?.substring(0, 8)}..., kind=${data.kind}, createdByRole=${data.createdByRole}, createdById=${data.createdById?.substring(0, 8) || 'undefined'}...`);
+
+    // Verify data integrity before create
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: data.conversationId },
+      select: { id: true, channelId: true },
     });
+
+    if (!conversation) {
+      this.logger.error(`[CALL_CREATE_ERROR] Conversation not found: conversationId=${data.conversationId}`);
+      throw new Error(`Conversation not found: ${data.conversationId}`);
+    }
+
+    if (conversation.channelId !== data.channelId) {
+      this.logger.error(`[CALL_CREATE_ERROR] Channel mismatch: conversation.channelId=${conversation.channelId}, provided.channelId=${data.channelId}`);
+      throw new Error(`Channel mismatch for conversation ${data.conversationId}`);
+    }
+
+    // Check if callId already exists
+    const existing = await (this.prisma as any).callRecord.findUnique({
+      where: { id: data.callId },
+      select: { id: true },
+    });
+
+    if (existing) {
+      this.logger.warn(`[CALL_CREATE_ERROR] CallRecord already exists: callId=${data.callId}`);
+      // Return existing record instead of failing
+      return existing;
+    }
+
+    try {
+      const record = await (this.prisma as any).callRecord.create({
+        data: {
+          id: data.callId,
+          channelId: data.channelId,
+          conversationId: data.conversationId,
+          kind: data.kind,
+          status: 'ringing',
+          createdByRole: data.createdByRole,
+          createdById: data.createdById,
+        },
+      });
+      this.logger.log(`[CALL_CREATE_SUCCESS] callId=${data.callId}, recordId=${record.id}`);
+      return record;
+    } catch (e: any) {
+      this.logger.error(`[CALL_CREATE_ERROR] Prisma error: code=${e.code}, message=${e.message}, meta=${JSON.stringify(e.meta || {})}`);
+      throw e;
+    }
   }
 
   async updateCallStatus(
