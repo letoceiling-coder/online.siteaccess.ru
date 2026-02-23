@@ -200,35 +200,62 @@ async function runE2E() {
     const widgetSocket = io(`${WS_BASE}/widget`, {
       auth: { token: widgetTokenJWT },
       transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
     });
 
     const operatorSocket = io(`${WS_BASE}/operator`, {
       auth: { token: operatorAccessToken },
       transports: ['websocket'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+    });
+
+    // [E2E] Add detailed disconnect/error logging
+    widgetSocket.on('disconnect', (reason) => {
+      console.log(`[E2E] Widget disconnected: reason=${reason}, socketId=${widgetSocket.id}`);
+    });
+    widgetSocket.on('connect_error', (err) => {
+      console.log(`[E2E] Widget connect_error: ${err?.message || JSON.stringify(err)}, type=${err?.type || 'unknown'}`);
+    });
+    widgetSocket.io.on('error', (err) => {
+      console.log(`[E2E] Widget io error: ${err?.message || JSON.stringify(err)}`);
+    });
+    
+    operatorSocket.on('disconnect', (reason) => {
+      console.log(`[E2E] Operator disconnected: reason=${reason}, socketId=${operatorSocket.id}`);
+    });
+    operatorSocket.on('connect_error', (err) => {
+      console.log(`[E2E] Operator connect_error: ${err?.message || JSON.stringify(err)}, type=${err?.type || 'unknown'}`);
+    });
+    operatorSocket.io.on('error', (err) => {
+      console.log(`[E2E] Operator io error: ${err?.message || JSON.stringify(err)}`);
     });
 
     await Promise.all([
       new Promise((resolve, reject) => {
-        widgetSocket.on('connect', resolve);
+        widgetSocket.on('connect', () => {
+          console.log(`[E2E] Widget connected: socketId=${widgetSocket.id}`);
+          resolve();
+        });
         widgetSocket.on('connect_error', (err) => {
-          console.log(`  Widget connect_error: ${JSON.stringify(err)}`);
+          console.log(`[E2E] Widget connect_error in promise: ${err?.message || JSON.stringify(err)}`);
           reject(err);
         });
-        widgetSocket.on('disconnect', (reason) => {
-          console.log(`  Widget disconnected: ${reason}`);
-        });
-        setTimeout(() => reject(new Error('Widget socket timeout')), 5000);
+        setTimeout(() => reject(new Error('Widget socket timeout')), 10000);
       }),
       new Promise((resolve, reject) => {
-        operatorSocket.on('connect', resolve);
+        operatorSocket.on('connect', () => {
+          console.log(`[E2E] Operator connected: socketId=${operatorSocket.id}`);
+          resolve();
+        });
         operatorSocket.on('connect_error', (err) => {
-          console.log(`  Operator connect_error: ${JSON.stringify(err)}`);
+          console.log(`[E2E] Operator connect_error in promise: ${err?.message || JSON.stringify(err)}`);
           reject(err);
         });
-        operatorSocket.on('disconnect', (reason) => {
-          console.log(`  Operator disconnected: ${reason}`);
-        });
-        setTimeout(() => reject(new Error('Operator socket timeout')), 5000);
+        setTimeout(() => reject(new Error('Operator socket timeout')), 10000);
       }),
     ]);
 

@@ -91,43 +91,63 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.join(`channel:${payload.channelId}`);
       client.join(`conversation:${payload.conversationId}`);
 
-      this.logger.log(`Widget connected: ${client.id}, channel: ${payload.channelId}, conversation: ${payload.conversationId}`);
+      this.logger.log(`[WS_TRACE] [WIDGET] Connection success: socketId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., conversationId=${payload.conversationId?.substring(0, 8)}...`);
+      
+      // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
+      if (client.conn) {
+        client.conn.on('close', (reason: string) => {
+          this.logger.warn(`[WS_TRACE] [WIDGET] conn.close: socketId=${client.id}, reason=${reason || 'unknown'}`);
+        });
+      }
+      client.on('disconnect', (reason: string) => {
+        this.logger.warn(`[WS_TRACE] [WIDGET] disconnect: socketId=${client.id}, reason=${reason || 'unknown'}`);
+      });
+      client.on('error', (err: Error) => {
+        this.logger.error(`[WS_TRACE] [WIDGET] error: socketId=${client.id}, message=${err?.message || 'unknown'}${err?.stack ? `, stack=${err.stack.substring(0, 300)}` : ''}`);
+      });
     } catch (error) {
       if (error instanceof WsException && error.message === 'DOMAIN_NOT_ALLOWED') {
-        this.logger.warn(`Widget connection rejected: domain not allowed, clientId=${client.id}`);
+        this.logger.warn(`[WS_TRACE] [WIDGET] Connection rejected: domain not allowed, clientId=${client.id}`);
         client.emit('error', { message: 'DOMAIN_NOT_ALLOWED' });
         client.disconnect();
       } else {
-        this.logger.warn(`Widget connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
+        this.logger.warn(`[WS_TRACE] [WIDGET] Connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
         client.disconnect();
       }
     }
   }
 
-  async handleDisconnect(client: Socket) {
-    this.logger.log(`Widget disconnected: ${client.id}`);
+  async handleDisconnect(client: Socket, reason: string) {
+    this.logger.log(`[WS_TRACE] [WIDGET] handleDisconnect: socketId=${client.id}, reason=${reason || 'unknown'}`);
   }
 
   @SubscribeMessage('message:send')
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
-    this.logger.log(`message:send received from ${client.id}, payload: ${JSON.stringify(payload)}`);
-    const { conversationId: socketConvId, visitorId } = client.data;
+    const { conversationId: socketConvId, visitorId, channelId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
+    
+    // [W_MSG_SAVE] Log incoming message
+    const clientMsgIdPrefix = clientMessageId ? clientMessageId.substring(0, 16) : 'missing';
+    this.logger.log(`[W_MSG_SAVE] Received: socketId=${client.id}, conversationId=${conversationId?.substring(0, 8)}..., clientMessageId=${clientMsgIdPrefix}..., textLength=${text?.length || 0}`);
+    this.logger.log(`[W_MSG_SAVE] Client data: channelId=${channelId?.substring(0, 8) || 'missing'}..., conversationId=${socketConvId?.substring(0, 8) || 'missing'}..., visitorId=${visitorId?.substring(0, 8) || 'missing'}...`);
 
     // Validate conversationId (UUID format)
     if (!conversationId || typeof conversationId !== 'string' || conversationId !== socketConvId) {
+      this.logger.warn(`[W_MSG_SAVE] Validation failed: conversationId mismatch, socketConvId=${socketConvId}, payloadConvId=${conversationId}`);
       client.emit('error', { message: 'Invalid conversationId' });
       return;
     }
 
     // Validate text
     if (!text || typeof text !== 'string' || text.trim().length === 0 || text.length > 4000) {
+      this.logger.warn(`[W_MSG_SAVE] Validation failed: invalid text, length=${text?.length || 0}`);
       client.emit('error', { message: 'Invalid text: must be 1-4000 chars' });
       return;
     }
 
     // Validate clientMessageId (REQUIRED, non-empty string)
     if (!clientMessageId || typeof clientMessageId !== 'string' || clientMessageId.trim().length === 0) {
+      this.logger.warn(`[W_MSG_SAVE] Validation failed: clientMessageId missing or empty`);
       client.emit('error', { message: 'clientMessageId is required and must be a non-empty string' });
       return;
     }
@@ -144,10 +164,11 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     } catch (error) {
       // Column might not exist, skip duplicate check
-      this.logger.warn(`Duplicate check skipped: ${error instanceof Error ? error.message : 'unknown'}`);
+      this.logger.warn(`[W_MSG_SAVE] Duplicate check skipped: ${error instanceof Error ? error.message : 'unknown'}`);
     }
 
     if (existing) {
+      this.logger.log(`[W_MSG_SAVE] Duplicate found: clientMessageId=${clientMsgIdPrefix}..., existingId=${existing.id}`);
       client.emit('message:ack', {
         clientMessageId,
         serverMessageId: existing.id,
@@ -159,23 +180,39 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Создание сообщения (using Prisma)
     const trimmedText = text.trim();
     
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId,
-        senderType: 'visitor',
-        senderId: null,
-        text: trimmedText, // Prisma maps 'text' field to 'content' column via @map("content")
-        clientMessageId: clientMessageId || null,
-        // encryptionVersion has default 0 in schema
-        // ciphertext is nullable, not set for plain text messages
-      },
-    });
+    let message;
+    try {
+      message = await this.prisma.message.create({
+        data: {
+          conversationId,
+          senderType: 'visitor',
+          senderId: null,
+          text: trimmedText, // Prisma maps 'text' field to 'content' column via @map("content")
+          clientMessageId: clientMessageId || null,
+          // encryptionVersion has default 0 in schema
+          // ciphertext is nullable, not set for plain text messages
+        },
+      });
+      this.logger.log(`[W_MSG_SAVE] Saved: messageId=${message.id}, clientMessageId=${clientMsgIdPrefix}..., conversationId=${conversationId?.substring(0, 8)}..., senderType=visitor`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      const errorCode = (error as any)?.code;
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`[W_MSG_SAVE] Prisma create failed: clientMessageId=${clientMsgIdPrefix}..., error=${errorMessage}, code=${errorCode || 'N/A'}${errorStack ? `, stack=${errorStack.substring(0, 400)}` : ''}`);
+      client.emit('error', { message: 'Failed to save message' });
+      return;
+    }
     
     // Update conversation updatedAt
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
+    try {
+      await this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      });
+    } catch (error) {
+      this.logger.warn(`[W_MSG_SAVE] Conversation updateAt update failed: ${error instanceof Error ? error.message : 'unknown'}`);
+      // Non-critical, continue
+    }
 
     // ACK отправителю (ONLY after successful DB persist)
     client.emit('message:ack', {
@@ -184,6 +221,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       conversationId: message.conversationId,
       createdAt: message.createdAt.toISOString(),
     });
+    this.logger.log(`[W_MSG_SAVE] ACK sent: clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${message.id}`);
 
     // Emit to both widget and operator namespaces for realtime delivery
     const { channelId } = client.data;

@@ -225,11 +225,37 @@ async function runE2E() {
       const text = `Widget message ${i} - ${Date.now()}`;
       widgetMessages.push({ clientMessageId, text });
       
+      console.log(`[E2E] Widget sending: clientMessageId=${clientMessageId}`);
+      
+      let ackReceived = false;
+      const ackPromise = new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          if (!ackReceived) {
+            console.log(`[E2E] Widget ACK timeout for: clientMessageId=${clientMessageId}`);
+            resolve(false);
+          }
+        }, 5000);
+        
+        widgetSocket.once('message:ack', (ack) => {
+          if (ack.clientMessageId === clientMessageId) {
+            ackReceived = true;
+            clearTimeout(timeout);
+            console.log(`[E2E] Widget ACK received: clientMessageId=${clientMessageId}, serverMessageId=${ack.serverMessageId}`);
+            resolve(true);
+          }
+        });
+      });
+      
       widgetSocket.emit('message:send', {
         conversationId,
         text,
         clientMessageId,
       });
+      
+      const ackOk = await ackPromise;
+      if (!ackOk) {
+        throw new Error(`Widget message ${i} ACK not received: clientMessageId=${clientMessageId}`);
+      }
       
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
@@ -240,11 +266,37 @@ async function runE2E() {
       const text = `Operator message ${i} - ${Date.now()}`;
       operatorMessages.push({ clientMessageId, text });
       
+      console.log(`[E2E] Operator sending: clientMessageId=${clientMessageId}`);
+      
+      let ackReceived = false;
+      const ackPromise = new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          if (!ackReceived) {
+            console.log(`[E2E] Operator ACK timeout for: clientMessageId=${clientMessageId}`);
+            resolve(false);
+          }
+        }, 5000);
+        
+        operatorSocket.once('message:ack', (ack) => {
+          if (ack.clientMessageId === clientMessageId) {
+            ackReceived = true;
+            clearTimeout(timeout);
+            console.log(`[E2E] Operator ACK received: clientMessageId=${clientMessageId}, serverMessageId=${ack.serverMessageId}`);
+            resolve(true);
+          }
+        });
+      });
+      
       operatorSocket.emit('message:send', {
         conversationId,
         text,
         clientMessageId,
       });
+      
+      const ackOk = await ackPromise;
+      if (!ackOk) {
+        throw new Error(`Operator message ${i} ACK not received: clientMessageId=${clientMessageId}`);
+      }
       
       await new Promise((resolve) => setTimeout(resolve, 300));
     }

@@ -100,6 +100,19 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       // Join channel room (CRITICAL for receiving messages from widget)
       client.join(`channel:${payload.channelId}`);
       this.logger.log(`[OP_WS_TRACE] Connection success: clientId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., joined room: channel:${payload.channelId}`);
+      
+      // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
+      if (client.conn) {
+        client.conn.on('close', (reason: string) => {
+          this.logger.warn(`[WS_TRACE] [OP] conn.close: socketId=${client.id}, reason=${reason || 'unknown'}`);
+        });
+      }
+      client.on('disconnect', (reason: string) => {
+        this.logger.warn(`[WS_TRACE] [OP] disconnect: socketId=${client.id}, reason=${reason || 'unknown'}`);
+      });
+      client.on('error', (err: Error) => {
+        this.logger.error(`[WS_TRACE] [OP] error: socketId=${client.id}, message=${err?.message || 'unknown'}${err?.stack ? `, stack=${err.stack.substring(0, 300)}` : ''}`);
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       const errorStack = error instanceof Error ? error.stack : undefined;
@@ -109,7 +122,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   async handleDisconnect(client: Socket, reason: string) {
-    this.logger.log(`[OP_WS_TRACE] Operator disconnected: socketId=${client.id}, reason=${reason || 'unknown'}`);
+    this.logger.log(`[WS_TRACE] [OP] handleDisconnect: socketId=${client.id}, reason=${reason || 'unknown'}`);
   }
 
   @SubscribeMessage('message:send')

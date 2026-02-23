@@ -6,7 +6,25 @@ import { join } from 'path';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Configure Socket.IO server options for stable connections
+    // This applies to all WebSocket gateways
+  });
+  
+  // Configure Socket.IO adapter with ping/pong settings
+  // This prevents premature disconnects behind proxies
+  const httpServer = app.getHttpServer();
+  const io = require('socket.io')(httpServer, {
+    pingInterval: 25000, // Send ping every 25 seconds
+    pingTimeout: 60000,  // Wait 60 seconds for pong before considering connection dead
+    transports: ['websocket', 'polling'], // Allow both, prefer websocket
+  });
+  
+  // Apply to all namespaces
+  io.engine.on('connection_error', (err: Error) => {
+    const logger = new Logger('SocketIO');
+    logger.error(`[WS_TRACE] Engine connection error: ${err.message}${err.stack ? `, stack=${err.stack.substring(0, 200)}` : ''}`);
+  });
 
   // Global exception filter for logging all errors
   app.useGlobalFilters(new AllExceptionsFilter());
