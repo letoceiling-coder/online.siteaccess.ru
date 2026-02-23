@@ -224,7 +224,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`[W_MSG_SAVE] ACK sent: clientMessageId=${clientMsgIdPrefix}..., serverMessageId=${message.id}`);
 
     // Emit to both widget and operator namespaces for realtime delivery
-    const { channelId } = client.data;
+    const channelIdFromData = client.data.channelId;
     const messagePayload = {
       serverMessageId: message.id,
       conversationId,

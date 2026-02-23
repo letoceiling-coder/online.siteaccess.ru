@@ -21,6 +21,8 @@ import { WsException } from '@nestjs/websockets';
 @WebSocketGateway({
   namespace: '/operator',
   cors: { origin: true, credentials: true },
+  pingInterval: 25000, // Send ping every 25 seconds
+  pingTimeout: 60000,  // Wait 60 seconds for pong before considering connection dead
 })
 @Injectable()
 export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect {
