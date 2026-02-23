@@ -211,6 +211,8 @@ export class CallsGateway {
     const channelId = client.data.channelId;
     const conversationId = client.data.conversationId;
 
+    this.logger.log(`[CALL_FORWARD] event=call:answer ns=${namespace} conversationId=${dto.conversationId} targetRoom=conversation:${dto.conversationId}`);
+
     const hasAccess = await this.callsService.verifyConversationAccess(
       dto.conversationId,
       dto.channelId,
@@ -233,10 +235,59 @@ export class CallsGateway {
       sdp: dto.sdp,
     };
 
-    this.forwardCallEvent('/widget', 'call:answer', payload, conversationId, client.id, server);
-    this.forwardCallEvent('/operator', 'call:answer', payload, conversationId, client.id, server);
+    // Forward to widget namespace
+    let widgetNamespace: any;
+    if (server && typeof server.of === 'function') {
+      widgetNamespace = server.of('/widget');
+    } else {
+      const mainServer = (server as any)?.server || (server as any)?.io;
+      if (mainServer && typeof mainServer.of === 'function') {
+        widgetNamespace = mainServer.of('/widget');
+      }
+    }
+    
+    if (widgetNamespace) {
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      widgetNamespace.to(conversationRoom).except(client.id).emit('call:answer', payload);
+      this.logger.log(`[CALL_TRACE] Forwarded call:answer to widget namespace room ${conversationRoom}`);
+    } else {
+      this.logger.error(`[CALL_TRACE] Cannot get widget namespace for call:answer`);
+    }
 
-    this.logger.log(`Call answer forwarded: callId=${dto.callId}`);
+    // Forward to operator namespace - CRITICAL: ensure operator is in conversation room
+    let operatorNamespace: any;
+    if (server && typeof server.of === 'function') {
+      operatorNamespace = server.of('/operator');
+    } else {
+      const mainServer = (server as any)?.server || (server as any)?.io;
+      if (mainServer && typeof mainServer.of === 'function') {
+        operatorNamespace = mainServer.of('/operator');
+      }
+    }
+    
+    if (operatorNamespace) {
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      
+      // Check room membership before emitting
+      const room = operatorNamespace.adapter.rooms.get(conversationRoom);
+      const roomSize = room?.size || 0;
+      this.logger.log(`[ROOM_CHECK] ns=operator room=conversation:${dto.conversationId} size=${roomSize}`);
+      
+      if (roomSize > 0) {
+        operatorNamespace.to(conversationRoom).except(client.id).emit('call:answer', payload);
+        this.logger.log(`[CALL_TRACE] Forwarded call:answer to operator namespace room ${conversationRoom}`);
+      } else {
+        this.logger.warn(`[CALL_TRACE] No operators in conversation room ${conversationRoom}, emitting to channel room as fallback`);
+        // Fallback: emit to channel room
+        const channelRoom = `channel:${dto.channelId}`;
+        operatorNamespace.to(channelRoom).except(client.id).emit('call:answer', payload);
+        this.logger.log(`[CALL_TRACE] Forwarded call:answer to operator channel room ${channelRoom} (fallback)`);
+      }
+    } else {
+      this.logger.error(`[CALL_TRACE] Cannot get operator namespace for call:answer`);
+    }
+
+    this.logger.log(`[CALL_TRACE] Call answer forwarded: callId=${dto.callId}`);
   }
 
   async handleCallIce(
