@@ -68,11 +68,17 @@ export class WidgetAuthGuard implements CanActivate {
       client.data.externalId = payload.externalId;
 
       // Join rooms immediately
-      if (payload.channelId) {
-        client.join(`channel:${payload.channelId}`);
-      }
+      // Widget sockets join ONLY conversation room (not channel room)
+      // This prevents duplicate message:new delivery when operator emits to both rooms
       if (payload.conversationId) {
         client.join(`conversation:${payload.conversationId}`);
+      }
+      
+      // Log rooms for debugging
+      const debugWs = process.env.DEBUG_WS === '1';
+      if (debugWs) {
+        const rooms = Array.from(client.rooms);
+        this.logger.log(`[ROOMS] ns=widget socketId=${client.id} rooms=[${rooms.join(',')}]`);
       }
 
       this.logger.log(`[GUARD TRACE] [WIDGET] Auth SUCCESS: clientId=${client.id}, event=${eventName}, channelId=${payload.channelId}, conversationId=${payload.conversationId}`);

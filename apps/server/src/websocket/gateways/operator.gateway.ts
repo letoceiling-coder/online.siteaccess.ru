@@ -61,7 +61,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
     
     if (!token || typeof token !== 'string') {
-      this.logger.warn(`[OP_WS_TRACE] Connection rejected: no token, clientId=${client.id}`);
+      this.logger.warn(`[AUTH_DISCONNECT] ns=operator socketId=${client.id} reason=no_token tokenSource=handshake`);
       client.disconnect(true);
       return;
     }
@@ -89,7 +89,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       });
 
       if (!membership) {
-        this.logger.warn(`[OP_WS_TRACE] Connection rejected: membership not found, clientId=${client.id}, userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
+        this.logger.warn(`[AUTH_DISCONNECT] ns=operator socketId=${client.id} reason=membership_not_found tokenSource=handshake userId=${payload.userId?.substring(0, 8)}... channelId=${payload.channelId?.substring(0, 8)}...`);
         client.disconnect(true);
         return;
       }
@@ -101,6 +101,20 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       // Join channel room (CRITICAL for receiving messages from widget)
       client.join(`channel:${payload.channelId}`);
+      
+      // Track last event for disconnect diagnostics
+      client.use((packet, next) => {
+        (client.data as any).lastEvent = packet?.[0] || 'unknown';
+        next();
+      });
+      
+      // Log rooms for debugging
+      const debugWs = process.env.DEBUG_WS === '1';
+      if (debugWs) {
+        const rooms = Array.from(client.rooms);
+        this.logger.log(`[ROOMS] ns=operator socketId=${client.id} rooms=[${rooms.join(',')}]`);
+      }
+      
       this.logger.log(`[OP_WS_TRACE] Connection success: clientId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., joined room: channel:${payload.channelId}`);
       
       // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
@@ -118,7 +132,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`[OP_WS_TRACE] Connection rejected: clientId=${client.id}, error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
+      this.logger.error(`[AUTH_DISCONNECT] ns=operator socketId=${client.id} reason=token_verify_failed tokenSource=handshake error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
       client.disconnect(true);
     }
   }
@@ -127,7 +141,9 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     // Note: reason is not provided by NestJS OnGatewayDisconnect interface in older versions
     // We log it from the disconnect event listener added in handleConnection
     const closeReason = (client as any).conn?.transport?.closeReason || reason || 'unknown';
-    this.logger.log(`[TRACE] [OP] handleDisconnect: socketId=${client.id}, reason=${closeReason}`);
+    const lastEvent = (client.data as any).lastEvent || 'unknown';
+    const authed = !!(client.data.channelId && client.data.userId);
+    this.logger.log(`[DISCONNECT] ns=operator socketId=${client.id} reason=${closeReason} lastEvent=${lastEvent} authed=${authed} channelId=${client.data.channelId?.substring(0, 8) || 'missing'}... userId=${client.data.userId?.substring(0, 8) || 'missing'}...`);
   }
 
   @SubscribeMessage('message:send')
@@ -232,17 +248,29 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
         createdAt: message.createdAt.toISOString(),
       };
 
+      const debugWs = process.env.DEBUG_WS === '1';
+      
       // Emit to operator namespace (other operators in same conversation)
+      // NOTE: Operators in both channel and conversation rooms will receive this message
+      // Client must dedupe by serverMessageId
       this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
+      
+      if (debugWs) {
+        this.logger.log(`[MSG_EMIT] ns=operator to=conversation:${conversationId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
+      }
 
       // Emit to widget namespace (widgets watching this conversation)
+      // Widgets only join conversation room, so emit only to conversation room
       // Access main server to get widget namespace
       const mainServer = (this.server as any).server;
       if (mainServer) {
         const widgetNamespace = mainServer.of('/widget');
         if (widgetNamespace) {
           widgetNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
-          this.logger.log(`[TRACE] [OP] Emitted message:new to widget namespace for conversation:${conversationId}`);
+          
+          if (debugWs) {
+            this.logger.log(`[MSG_EMIT] ns=widget to=conversation:${conversationId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
+          }
         }
       }
 

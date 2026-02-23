@@ -146,8 +146,16 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.conversationId = payload.conversationId;
       client.data.externalId = payload.externalId;
 
-      client.join(`channel:${payload.channelId}`);
+      // Widget sockets join ONLY conversation room (not channel room)
+      // This prevents duplicate message:new delivery when operator emits to both rooms
       client.join(`conversation:${payload.conversationId}`);
+      
+      // Log rooms for debugging
+      const debugWs = process.env.DEBUG_WS === '1';
+      if (debugWs) {
+        const rooms = Array.from(client.rooms);
+        this.logger.log(`[ROOMS] ns=widget socketId=${client.id} rooms=[${rooms.join(',')}]`);
+      }
 
       this.logger.log(`[WS_TRACE] [WIDGET] Connection success: socketId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., conversationId=${payload.conversationId?.substring(0, 8)}...`);
       
@@ -179,7 +187,9 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Note: reason is not provided by NestJS OnGatewayDisconnect interface in older versions
     // We log it from the disconnect event listener added in handleConnection
     const closeReason = (client as any).conn?.transport?.closeReason || reason || 'unknown';
-    this.logger.log(`[TRACE] [WIDGET] handleDisconnect: socketId=${client.id}, reason=${closeReason}`);
+    const lastEvent = (client.data as any).lastEvent || 'unknown';
+    const authed = !!(client.data.channelId && client.data.conversationId);
+    this.logger.log(`[DISCONNECT] ns=widget socketId=${client.id} reason=${closeReason} lastEvent=${lastEvent} authed=${authed} channelId=${client.data.channelId?.substring(0, 8) || 'missing'}... conversationId=${client.data.conversationId?.substring(0, 8) || 'missing'}...`);
   }
 
   @SubscribeMessage('message:send')
@@ -290,20 +300,32 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       };
 
       // Emit to widget namespace (other widgets in same conversation)
+      // Widgets only join conversation room, so emit only to conversation room
       this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
+      
+      const debugWs = process.env.DEBUG_WS === '1';
+      if (debugWs) {
+        this.logger.log(`[MSG_EMIT] ns=widget to=conversation:${conversationId} conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
+      }
 
       // Emit to operator namespace
       // CRITICAL: Emit to BOTH channel room (all operators) AND conversation room (joined operators)
       // Operators always join channel:{channelId} on connect, but only join conversation:{conversationId} when they open it
+      // NOTE: Operators in both rooms will receive the message, but they should dedupe by serverMessageId
       const mainServer = (this.server as any).server;
       if (mainServer) {
         const operatorNamespace = mainServer.of('/operator');
         if (operatorNamespace && channelId) {
-          // Emit to channel room (MANDATORY - all operators in channel receive this)
+          // Emit to channel room (MANDATORY - all operators in channel receive this for list updates)
           operatorNamespace.to(`channel:${channelId}`).emit('message:new', messagePayload);
-          // Also emit to conversation room (for operators who have explicitly joined)
+          // Also emit to conversation room (for operators who have explicitly joined the conversation)
+          // Operators in both rooms will receive twice, but client must dedupe by serverMessageId
           operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
-          this.logger.log(`[TRACE] [WIDGET] Emitted message:new to operator namespace: channel:${channelId} and conversation:${conversationId}`);
+          
+          if (debugWs) {
+            this.logger.log(`[MSG_EMIT] ns=operator to=channel:${channelId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
+            this.logger.log(`[MSG_EMIT] ns=operator to=conversation:${conversationId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
+          }
         }
       }
 
