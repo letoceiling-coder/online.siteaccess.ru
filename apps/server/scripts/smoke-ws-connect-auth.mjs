@@ -9,6 +9,8 @@
 import { io } from 'socket.io-client';
 
 const BASE_URL = process.env.BASE_URL || 'https://online.siteaccess.ru';
+const E2E_ORIGIN = process.env.E2E_ORIGIN || 'https://example.com';
+const E2E_ORIGIN_HOST = new URL(E2E_ORIGIN).hostname;
 
 async function runSmoke() {
   console.log('=== Smoke Test: WebSocket Connection (with Auth) ===\n');
@@ -55,7 +57,10 @@ async function runSmoke() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ name: projectName }),
+      body: JSON.stringify({ 
+        name: projectName,
+        domains: [E2E_ORIGIN_HOST],
+      }),
     });
 
     if (!projectRes.ok) {
@@ -153,7 +158,7 @@ async function runSmoke() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Origin': 'https://example.com',
+        'Origin': E2E_ORIGIN,
       },
       body: JSON.stringify({
         token: widgetToken,
@@ -175,7 +180,19 @@ async function runSmoke() {
     const operatorSocket = io(`${BASE_URL}/operator`, {
       path: '/socket.io',
       auth: { token: operatorAccessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
       reconnection: false,
       timeout: 10000,
     });
@@ -215,7 +232,19 @@ async function runSmoke() {
     const widgetSocket = io(`${BASE_URL}/widget`, {
       path: '/socket.io',
       auth: { token: visitorSessionToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
       reconnection: false,
       timeout: 10000,
     });

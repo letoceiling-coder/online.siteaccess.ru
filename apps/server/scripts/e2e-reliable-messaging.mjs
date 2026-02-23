@@ -18,6 +18,8 @@ import { io } from 'socket.io-client';
 const BASE_URL = process.env.BASE_URL || process.env.API_URL || 'https://online.siteaccess.ru';
 const API_URL = BASE_URL;
 const WS_BASE = BASE_URL;
+const E2E_ORIGIN = process.env.E2E_ORIGIN || 'https://example.com';
+const E2E_ORIGIN_HOST = new URL(E2E_ORIGIN).hostname;
 
 async function runE2E() {
   console.log('=== E2E Test: Reliable Messaging ===\n');
@@ -66,7 +68,7 @@ async function runE2E() {
       },
       body: JSON.stringify({
         name: `Reliable Test ${Date.now()}`,
-        domains: ['example.com'],
+        domains: [E2E_ORIGIN_HOST],
       }),
     });
 
@@ -164,7 +166,7 @@ async function runE2E() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Origin: 'https://example.com',
+        Origin: E2E_ORIGIN,
       },
       body: JSON.stringify({
         token: widgetToken,
@@ -189,13 +191,37 @@ async function runE2E() {
     const widgetSocket = io(`${WS_BASE}/widget`, {
       path: '/socket.io',
       auth: { token: visitorSessionToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
     });
 
     const operatorSocket = io(`${WS_BASE}/operator`, {
       path: '/socket.io',
       auth: { token: operatorAccessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
     });
 
     await new Promise((resolve) => {

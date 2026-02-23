@@ -60,8 +60,41 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`[TRACE] Token verified: channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
       
       // Domain lock: validate origin against allowedDomains
-      const origin = client.handshake.headers.origin || client.handshake.headers.referer;
-      const originHost = origin ? new URL(origin).hostname : null;
+      // Extract origin from multiple sources
+      const originHeader = client.handshake.headers.origin;
+      const refererHeader = client.handshake.headers.referer;
+      const hostHeader = client.handshake.headers.host;
+      const xForwardedHost = client.handshake.headers['x-forwarded-host'];
+      
+      // Normalize origin hostname
+      let originHost: string | null = null;
+      let originUrl: string | null = null;
+      
+      if (originHeader) {
+        try {
+          originUrl = originHeader;
+          const url = new URL(originHeader);
+          originHost = url.hostname.toLowerCase();
+          // Remove port if present
+          if (originHost.includes(':')) {
+            originHost = originHost.split(':')[0];
+          }
+        } catch (e) {
+          // Invalid origin URL, try to parse as hostname
+          originHost = originHeader.toLowerCase();
+        }
+      } else if (refererHeader) {
+        try {
+          originUrl = refererHeader;
+          const url = new URL(refererHeader);
+          originHost = url.hostname.toLowerCase();
+          if (originHost.includes(':')) {
+            originHost = originHost.split(':')[0];
+          }
+        } catch (e) {
+          // Invalid referer URL
+        }
+      }
       
       const channel = await this.prisma.channel.findUnique({
         where: { id: payload.channelId },
@@ -73,13 +106,38 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const channelIdPrefix = channel.id.substring(0, 8);
         
         if (allowedDomains && allowedDomains.length > 0) {
-          if (!originHost || !allowedDomains.includes(originHost)) {
-            this.logger.warn(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... denied: origin=${originHost || 'missing'}, allowed=${allowedDomains.join(',')}`);
+          // Normalize allowed domains (lowercase, no port)
+          const normalizedAllowed = allowedDomains.map(d => d.toLowerCase().split(':')[0]);
+          
+          let allowDecision = false;
+          let denyReason = '';
+          
+          if (!originHost) {
+            // Missing origin: allow only in E2E test mode
+            if (process.env.E2E_ALLOW_NO_ORIGIN === 'true') {
+              allowDecision = true;
+              denyReason = 'missing_origin_e2e_bypass';
+              this.logger.warn(`[DOMAIN_LOCK_WS] E2E bypass for missing origin: channelId=${channelIdPrefix}...`);
+            } else {
+              allowDecision = false;
+              denyReason = 'missing_origin';
+            }
+          } else if (normalizedAllowed.includes(originHost)) {
+            allowDecision = true;
+          } else {
+            allowDecision = false;
+            denyReason = 'origin_not_in_allowed';
+          }
+          
+          // Log decision with all context
+          this.logger.log(`[DOMAIN_LOCK_WS] ${allowDecision ? 'allow' : 'deny'} channelId=${channelIdPrefix}... origin=${originHost || 'missing'} originUrl=${originUrl || 'missing'} referer=${refererHeader || 'missing'} allowed=[${normalizedAllowed.join(',')}] reason=${denyReason || 'allowed'}`);
+          
+          if (!allowDecision) {
+            this.logger.warn(`[DOMAIN_LOCK_WS] Connection rejected: ${denyReason}, channelId=${channelIdPrefix}...`);
             throw new WsException('DOMAIN_NOT_ALLOWED');
           }
-          this.logger.log(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... allowed: origin=${originHost}`);
         } else {
-          this.logger.warn(`[DOMAIN_LOCK] WS Channel ${channelIdPrefix}... has no allowedDomains - allowing all origins (dev mode)`);
+          this.logger.warn(`[DOMAIN_LOCK_WS] Channel ${channelIdPrefix}... has no allowedDomains - allowing all origins (dev mode)`);
         }
       }
       

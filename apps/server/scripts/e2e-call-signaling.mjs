@@ -21,6 +21,8 @@ import { PrismaClient } from '@prisma/client';
 const BASE_URL = process.env.BASE_URL || process.env.API_URL || 'https://online.siteaccess.ru';
 const API_URL = BASE_URL;
 const WS_BASE = BASE_URL;
+const E2E_ORIGIN = process.env.E2E_ORIGIN || 'https://example.com';
+const E2E_ORIGIN_HOST = new URL(E2E_ORIGIN).hostname;
 
 let prisma = null;
 try {
@@ -77,7 +79,10 @@ async function runE2E() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ name: projectName }),
+      body: JSON.stringify({ 
+        name: projectName,
+        domains: [E2E_ORIGIN_HOST],
+      }),
     });
 
     if (!projectRes.ok) {
@@ -175,7 +180,7 @@ async function runE2E() {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'Origin': 'https://example.com', // For domain lock bypass in test
+        'Origin': E2E_ORIGIN,
       },
       body: JSON.stringify({ token: widgetToken, externalId }),
     });
@@ -203,7 +208,19 @@ async function runE2E() {
     const widgetSocket = io(`${WS_BASE}/widget`, {
       path: '/socket.io',
       auth: { token: widgetTokenJWT },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
@@ -212,7 +229,19 @@ async function runE2E() {
     const operatorSocket = io(`${WS_BASE}/operator`, {
       path: '/socket.io',
       auth: { token: operatorAccessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
