@@ -22,8 +22,6 @@ import { WsException } from '@nestjs/websockets';
   namespace: '/operator',
   cors: { origin: true, credentials: true },
 })
-@UseGuards(OperatorAuthGuard)
-@UsePipes(new ValidationPipe())
 @Injectable()
 export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
