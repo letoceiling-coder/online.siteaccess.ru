@@ -45,14 +45,14 @@ export class CallsGateway {
   ) {
     const srv = server || this.server;
     if (!srv) {
-      this.logger.error(`Cannot forward ${event}: server not available`);
+      this.logger.error(`[CALL_TRACE] Cannot forward ${event}: server not available`);
       return;
     }
     
     const namespaceServer = srv.of(namespace);
     const room = `conversation:${conversationId}`;
     
-    this.logger.log(`Forwarding ${event} to ${namespace} room ${room}${excludeClientId ? ` (excluding ${excludeClientId})` : ''}`);
+    this.logger.log(`[CALL_TRACE] Forwarding ${event} to ${namespace} room ${room}${excludeClientId ? ` (excluding ${excludeClientId})` : ''}`);
     
     if (excludeClientId) {
       namespaceServer.to(room).except(excludeClientId).emit(event, payload);
@@ -69,7 +69,7 @@ export class CallsGateway {
     server: Server,
   ) {
     const channelId = client.data.channelId;
-    const conversationId = client.data.conversationId;
+    const clientConversationId = client.data.conversationId; // May be undefined for operators
     const userId = client.data.userId;
     const visitorId = client.data.visitorId;
 
@@ -85,8 +85,24 @@ export class CallsGateway {
       throw new WsException('FORBIDDEN: No access to this conversation');
     }
 
-    if (dto.conversationId !== conversationId || dto.channelId !== channelId) {
-      throw new WsException('FORBIDDEN: Conversation/channel mismatch');
+    // For operators, conversationId is not in client.data (they join rooms dynamically)
+    // For widgets, conversationId is set during connection
+    if (fromRole === 'visitor' && clientConversationId && dto.conversationId !== clientConversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
+    
+    if (dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN: Channel mismatch');
+    }
+    
+    // Ensure operator is in conversation room (for operators, join if not already)
+    if (fromRole === 'operator') {
+      const rooms = Array.from(client.rooms);
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      if (!rooms.includes(conversationRoom)) {
+        this.logger.log(`[CALL_TRACE] Operator not in conversation room, joining: ${conversationRoom}`);
+        client.join(conversationRoom);
+      }
     }
 
     // Create call record
@@ -123,10 +139,21 @@ export class CallsGateway {
       sdp: dto.sdp,
     };
 
-    this.forwardCallEvent('/widget', 'call:offer', offerPayload, conversationId, client.id, server);
-    this.forwardCallEvent('/operator', 'call:offer', offerPayload, conversationId, client.id, server);
+    // Forward to widget namespace: use conversation room (widgets join on connect)
+    // Also try channel room as fallback
+    this.forwardCallEvent('/widget', 'call:offer', offerPayload, dto.conversationId, client.id, server);
+    // Also emit to channel room as fallback for widgets
+    const widgetNamespace = server.of('/widget');
+    if (widgetNamespace) {
+      const channelRoom = `channel:${dto.channelId}`;
+      widgetNamespace.to(channelRoom).except(client.id).emit('call:offer', offerPayload);
+      this.logger.log(`[CALL_TRACE] Forwarded call:offer to widget channel room: ${channelRoom}`);
+    }
 
-    this.logger.log(`Call offer forwarded: callId=${dto.callId}, conversationId=${conversationId}`);
+    // Forward to operator namespace: use conversation room (operators join explicitly)
+    this.forwardCallEvent('/operator', 'call:offer', offerPayload, dto.conversationId, client.id, server);
+
+    this.logger.log(`[CALL_TRACE] Call offer forwarded: callId=${dto.callId}, conversationId=${dto.conversationId}, fromRole=${fromRole}`);
   }
 
   async handleCallAnswer(

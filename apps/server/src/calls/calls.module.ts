@@ -9,6 +9,6 @@ import { AuthModule } from '../auth/auth.module';
   imports: [PrismaModule, AuthModule],
   controllers: [CallsController],
   providers: [CallsService, CallsGateway],
-  exports: [CallsService],
+  exports: [CallsService, CallsGateway],
 })
 export class CallsModule {}

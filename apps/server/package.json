@@ -25,6 +25,7 @@
     "smoke:widget:domain": "node scripts/smoke-widget-domain-lock.mjs",
     "smoke:widget:ping": "node scripts/smoke-widget-ping.mjs",
     "smoke:widget:session:stable": "node scripts/smoke-widget-session-stable.mjs",
+    "smoke:widget:messages": "node scripts/smoke-widget-messages.mjs",
     "e2e:history:parity": "node scripts/e2e-history-parity.mjs",
     "e2e:widget:realtime": "node scripts/e2e-widget-realtime-append.mjs",
     "e2e:reliable:messaging": "node scripts/e2e-reliable-messaging.mjs",

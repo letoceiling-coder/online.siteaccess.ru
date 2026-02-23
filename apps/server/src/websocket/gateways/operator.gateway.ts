@@ -11,6 +11,12 @@ import { OperatorAuthGuard } from '../middleware/operator-auth.middleware';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { CallsGateway } from '../../calls/calls.gateway';
+import { CallOfferDto } from '../../calls/dto/call-offer.dto';
+import { CallAnswerDto } from '../../calls/dto/call-answer.dto';
+import { CallIceDto } from '../../calls/dto/call-ice.dto';
+import { CallHangupDto } from '../../calls/dto/call-hangup.dto';
+import { WsException } from '@nestjs/websockets';
 
 @WebSocketGateway({
   namespace: '/operator',
@@ -29,6 +35,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     private prisma: PrismaService,
     private jwtService: JwtService,
     private config: ConfigService,
+    private callsGateway: CallsGateway,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -281,6 +288,65 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
     } catch (error) {
       this.logger.error(`Sync request failed: ${error instanceof Error ? error.message : 'unknown'}`, error instanceof Error ? error.stack : undefined);
       client.emit('error', { message: 'Sync request failed' });
+    }
+  }
+
+  @SubscribeMessage('call:offer')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
+  async handleCallOffer(client: Socket, payload: any) {
+    this.logger.log(`[CALL_TRACE] Operator received call:offer: callId=${payload?.callId}, conversationId=${payload?.conversationId}, channelId=${payload?.channelId}`);
+    try {
+      const dto = payload as CallOfferDto;
+      // For operators, conversationId is not in client.data initially - use dto.conversationId
+      // Ensure operator joins conversation room if not already joined
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      const rooms = Array.from(client.rooms);
+      if (!rooms.includes(conversationRoom)) {
+        this.logger.log(`[CALL_TRACE] Operator not in conversation room, joining: ${conversationRoom}`);
+        client.join(conversationRoom);
+      }
+      await this.callsGateway.handleCallOffer(dto, client, 'operator', '/operator', this.server);
+      this.logger.log(`[CALL_TRACE] Call offer processed: callId=${dto.callId}`);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Call offer error: ${error instanceof Error ? error.message : 'unknown'}, callId=${payload?.callId}`);
+      client.emit('call:failed', { callId: payload?.callId, reason: 'offer_failed' });
+    }
+  }
+
+  @SubscribeMessage('call:answer')
+  async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
+    this.logger.log(`[CALL_TRACE] Operator received call:answer: callId=${payload?.callId}`);
+    try {
+      await this.callsGateway.handleCallAnswer(payload, client, '/operator', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Call answer error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:ice')
+  async handleCallIce(client: Socket, payload: CallIceDto) {
+    try {
+      await this.callsGateway.handleCallIce(payload, client, '/operator', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Call ICE error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:hangup')
+  async handleCallHangup(client: Socket, payload: CallHangupDto) {
+    try {
+      await this.callsGateway.handleCallHangup(payload, client, '/operator', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Call hangup error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:busy')
+  async handleCallBusy(client: Socket, payload: CallHangupDto) {
+    try {
+      await this.callsGateway.handleCallBusy(payload, client, '/operator', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Call busy error: ${error instanceof Error ? error.message : 'unknown'}`);
     }
   }
 }

@@ -12,6 +12,11 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import Redis from 'ioredis';
 import { WidgetAuthGuard } from '../middleware/widget-auth.middleware';
+import { CallsGateway } from '../../calls/calls.gateway';
+import { CallOfferDto } from '../../calls/dto/call-offer.dto';
+import { CallAnswerDto } from '../../calls/dto/call-answer.dto';
+import { CallIceDto } from '../../calls/dto/call-ice.dto';
+import { CallHangupDto } from '../../calls/dto/call-hangup.dto';
 
 @WebSocketGateway({
   namespace: '/widget',
@@ -32,6 +37,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @Inject('REDIS_CLIENT') private redis: Redis,
     private jwtService: JwtService,
     private config: ConfigService,
+    private callsGateway: CallsGateway,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -297,5 +303,56 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       channelId,
       onlineVisitors: count,
     });
+  }
+
+  @SubscribeMessage('call:offer')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
+  async handleCallOffer(client: Socket, payload: any) {
+    this.logger.log(`[CALL_TRACE] Widget received call:offer: callId=${payload?.callId}, conversationId=${payload?.conversationId}`);
+    try {
+      const dto = payload as CallOfferDto;
+      await this.callsGateway.handleCallOffer(dto, client, 'visitor', '/widget', this.server);
+      this.logger.log(`[CALL_TRACE] Widget call offer processed: callId=${dto.callId}`);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Widget call offer error: ${error instanceof Error ? error.message : 'unknown'}, callId=${payload?.callId}`);
+      client.emit('call:failed', { callId: payload?.callId, reason: 'offer_failed' });
+    }
+  }
+
+  @SubscribeMessage('call:answer')
+  async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
+    this.logger.log(`[CALL_TRACE] Widget received call:answer: callId=${payload?.callId}`);
+    try {
+      await this.callsGateway.handleCallAnswer(payload, client, '/widget', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Widget call answer error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:ice')
+  async handleCallIce(client: Socket, payload: CallIceDto) {
+    try {
+      await this.callsGateway.handleCallIce(payload, client, '/widget', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Widget call ICE error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:hangup')
+  async handleCallHangup(client: Socket, payload: CallHangupDto) {
+    try {
+      await this.callsGateway.handleCallHangup(payload, client, '/widget', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Widget call hangup error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  @SubscribeMessage('call:busy')
+  async handleCallBusy(client: Socket, payload: CallHangupDto) {
+    try {
+      await this.callsGateway.handleCallBusy(payload, client, '/widget', this.server);
+    } catch (error) {
+      this.logger.error(`[CALL_TRACE] Widget call busy error: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
   }
 }

@@ -5,11 +5,13 @@ import { WidgetGateway } from './gateways/widget.gateway';
 import { OperatorGateway } from './gateways/operator.gateway';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RedisModule } from './redis.module';
+import { CallsModule } from '../calls/calls.module';
 
 @Module({
   imports: [
     PrismaModule,
     RedisModule,
+    CallsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
