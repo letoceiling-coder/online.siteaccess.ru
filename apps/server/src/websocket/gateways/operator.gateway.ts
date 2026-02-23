@@ -115,6 +115,8 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('message:send')
+  @UseGuards(OperatorAuthGuard)
+  @UsePipes(new ValidationPipe())
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
     const { channelId, userId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
@@ -218,6 +220,8 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('operator:conversation:join')
+  @UseGuards(OperatorAuthGuard)
+  @UsePipes(new ValidationPipe())
   async handleConversationJoin(client: Socket, payload: { conversationId: string }) {
     const { channelId, userId } = client.data;
     const { conversationId } = payload;
@@ -255,6 +259,8 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('sync:request')
+  @UseGuards(OperatorAuthGuard)
+  @UsePipes(new ValidationPipe())
   async handleSyncRequest(client: Socket, payload: { conversationId: string; sinceCreatedAt?: string; limit?: number }) {
     const { channelId, userId } = client.data;
     const { conversationId, sinceCreatedAt, limit = 100 } = payload;
@@ -318,6 +324,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:offer')
+  @UseGuards(OperatorAuthGuard)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleCallOffer(client: Socket, payload: any) {
     this.logger.log(`[CALL_TRACE] Operator received call:offer: callId=${payload?.callId}, conversationId=${payload?.conversationId}, channelId=${payload?.channelId}`);
@@ -340,6 +347,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:answer')
+  @UseGuards(OperatorAuthGuard)
   async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
     this.logger.log(`[CALL_TRACE] Operator received call:answer: callId=${payload?.callId}`);
     try {
@@ -350,6 +358,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:ice')
+  @UseGuards(OperatorAuthGuard)
   async handleCallIce(client: Socket, payload: CallIceDto) {
     try {
       await this.callsGateway.handleCallIce(payload, client, '/operator', this.server);
@@ -359,6 +368,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:hangup')
+  @UseGuards(OperatorAuthGuard)
   async handleCallHangup(client: Socket, payload: CallHangupDto) {
     try {
       await this.callsGateway.handleCallHangup(payload, client, '/operator', this.server);
@@ -368,6 +378,7 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:busy')
+  @UseGuards(OperatorAuthGuard)
   async handleCallBusy(client: Socket, payload: CallHangupDto) {
     try {
       await this.callsGateway.handleCallBusy(payload, client, '/operator', this.server);
