@@ -461,7 +461,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('call:answer')
-    this.logger.log(`[CALL_ANSWER_ENTRY] ns=${client.nsp.name} socketId=${client.id} callId=${payload?.callId} conversationId=${payload?.conversationId}`);
+  async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
     this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId}`);
     try {
       await this.callsGateway.handleCallAnswer(payload, client, '/widget', this.server);
