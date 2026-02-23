@@ -30,8 +30,9 @@ export class CallsService {
     }
 
     if (conversation.channelId !== data.channelId) {
-      this.logger.error(`[CALL_CREATE_ERROR] Channel mismatch: conversation.channelId=${conversation.channelId}, provided.channelId=${data.channelId}`);
-      throw new Error(`Channel mismatch for conversation ${data.conversationId}`);
+      this.logger.warn(`[CALL_CREATE_WARN] Channel mismatch: conversation.channelId=${conversation.channelId}, provided.channelId=${data.channelId}. Using conversation.channelId.`);
+      // Use conversation's channelId instead of provided one (conversation is source of truth)
+      data.channelId = conversation.channelId;
     }
 
     // Check if callId already exists
