@@ -343,9 +343,15 @@ async function runE2E() {
       }
     }
     
+    // Debug: log all clientMessageIds in history
+    console.log(`  [DEBUG] History clientMessageIds: ${Array.from(historyByClientId.keys()).join(', ')}`);
+    console.log(`  [DEBUG] Expected clientMessageIds: ${[...widgetMessages, ...operatorMessages].map(m => m.clientMessageId).join(', ')}`);
+    
     // Verify all sent messages exist by clientMessageId
     for (const msg of [...widgetMessages, ...operatorMessages]) {
       if (!historyByClientId.has(msg.clientMessageId)) {
+        console.log(`  [DEBUG] Missing message: clientMessageId=${msg.clientMessageId}, text=${msg.text}`);
+        console.log(`  [DEBUG] Full history: ${JSON.stringify(allHistory.map(m => ({ clientMessageId: m.clientMessageId, text: m.text?.substring(0, 30) })), null, 2)}`);
         throw new Error(`Message not found in history by clientMessageId: ${msg.clientMessageId} (text: ${msg.text})`);
       }
     }
