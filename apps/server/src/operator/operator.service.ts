@@ -49,17 +49,21 @@ export class OperatorService {
       take: Math.min(limit, 200),
       select: {
         id: true,
+        conversationId: true,
         text: true,
         senderType: true,
         createdAt: true,
+        clientMessageId: true,
       },
     });
 
     return messages.map((msg) => ({
       serverMessageId: msg.id,
+      conversationId: msg.conversationId,
       text: msg.text,
       senderType: msg.senderType,
       createdAt: msg.createdAt.toISOString(),
+      clientMessageId: msg.clientMessageId,
     }));
   }
 
