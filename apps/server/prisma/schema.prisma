@@ -160,5 +160,5 @@ model CallRecord {
   @@index([conversationId])
   @@index([status])
   @@index([createdAt])
-  @@map("call_records")
+  @@map("calls")
 }
