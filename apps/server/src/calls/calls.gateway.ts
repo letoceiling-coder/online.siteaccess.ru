@@ -50,13 +50,10 @@ export class CallsGateway {
     }
     
     // Ensure srv is a Socket.IO Server instance
-    // If it's a namespace, use it directly; otherwise get namespace
+    // Get namespace from server
     let namespaceServer: any;
     if (typeof srv.of === 'function') {
       namespaceServer = srv.of(namespace);
-    } else if (srv.nsp && srv.nsp.name === namespace) {
-      // Already a namespace
-      namespaceServer = srv;
     } else {
       // Try to get namespace from server property
       const mainServer = (srv as any).server || (srv as any).io;
