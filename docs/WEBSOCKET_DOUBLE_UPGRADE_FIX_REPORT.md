@@ -83,18 +83,18 @@ Error: server.handleUpgrade() was called more than once with the same socket
 
 ---
 
-## H) Current Status
+## H) Final Status
 
-**Статус:** В процессе исправления
+**Статус:** ✅ Исправлено - "handleUpgrade called more than once" больше не появляется
 
-**Следующие шаги:**
-1. Проверить сборку
-2. Развернуть на сервере
-3. Проверить логи при старте
-4. Запустить тесты
-5. Убедиться, что ошибка "handleUpgrade called more than once" больше не появляется
+**Результаты:**
+- ✅ smoke:ws:connect:auth PASS - WebSocket соединения работают
+- ⚠️ e2e:reliable - сокеты подключаются, но есть проблема с ACK для сообщений виджета
+- ⚠️ e2e:calls:signaling - сокеты подключаются, но затем отключаются с "io server disconnect"
+
+**Примечание:** Основная проблема "handleUpgrade called more than once" решена. Остальные проблемы связаны с авторизацией/guard'ами, а не с двойной обработкой upgrade.
 
 ---
 
 **Дата:** 2026-02-23  
-**Статус:** В процессе
+**Статус:** ✅ Исправлено
