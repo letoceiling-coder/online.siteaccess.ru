@@ -358,7 +358,19 @@ async function runE2E() {
     const widgetSocket2 = io(`${WS_BASE}/widget`, {
       path: '/socket.io',
       auth: { token: visitorSessionToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
+      transportOptions: {
+        polling: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+        websocket: {
+          extraHeaders: {
+            Origin: E2E_ORIGIN,
+          },
+        },
+      },
     });
     
     await new Promise((resolve) => widgetSocket2.on('connect', resolve));
