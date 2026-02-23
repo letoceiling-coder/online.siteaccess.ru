@@ -17,12 +17,19 @@
 1. Widget sockets больше НЕ присоединяются к channel room (только conversation room)
 2. Исправлена проверка дубликатов в тесте - проверка внутри каждого массива отдельно
 
-### A.2. "io server disconnect" (e2e:calls:signaling)
+### A.2. "io server disconnect" (e2e:calls:signaling) — исправлено
 
 **Root Cause:** 
-Оператор отключается из-за отсутствия токена в handshake: `[AUTH_DISCONNECT] ns=operator socketId=... reason=no_token tokenSource=handshake`
+Оператор отключался из-за отсутствия токена в handshake: `[AUTH_DISCONNECT] ns=operator socketId=... reason=no_token tokenSource=handshake`
 
-**Status:** ⚠️ Требуется проверка передачи токена в e2e-call-signaling.mjs
+**Fix:**
+1. Добавлена валидация токена перед подключением socket
+2. Добавлены debug логи для проверки токена
+3. Исправлена деструктуризация ответа от `/api/operator/auth/login` (поддержка обоих вариантов: `accessToken` и `operatorAccessToken`)
+
+**Status:** ✅ Токен теперь доходит до сервера, оператор подключается успешно
+
+**Новая проблема:** ⚠️ `call:offer` не доставляется виджету, оператор получает `call:failed: {"reason":"offer_failed"}` — требует отдельного исправления
 
 ---
 
@@ -58,7 +65,8 @@
 **Commits:**
 - `be60352` - FIX: prevent duplicate messages (widget not join channel room) + add disconnect diagnostics
 - `fc3794d` - FIX: correct duplicate check in e2e:reliable (check within each history, not across)
-- (последний commit для исправления undefined)
+- `5f522ef` - FIX: remove undefined uniqueClientIds reference + add report
+- `a5ad5d7` - FIX: add token validation and debug logs in e2e:calls:signaling
 
 ---
 
@@ -84,15 +92,16 @@
 [E2E] Operator disconnected: reason=io server disconnect
 ```
 
-**Server Logs:**
+**Server Logs (после исправления):**
 ```
-[AUTH_DISCONNECT] ns=operator socketId=... reason=no_token tokenSource=handshake
-[DISCONNECT] ns=widget socketId=... reason=unknown lastEvent=unknown authed=false
+[OP_WS_TRACE] Token sources: auth.token=true, query.token=false, headers.authorization=false
+[OP_WS_TRACE] Connection success: clientId=..., channelId=...
 ```
 
-**Статус:** ⚠️ FAIL
-- Проблема: оператор отключается из-за отсутствия токена в handshake
-- Требуется: проверить передачу токена в e2e-call-signaling.mjs
+**Статус:** ✅ Токен работает, оператор подключается
+- ✅ Токен доходит до сервера (`auth.token=true`)
+- ✅ Оператор подключается успешно
+- ⚠️ Новая проблема: `call:offer` не доставляется виджету, оператор получает `call:failed: {"reason":"offer_failed"}`
 
 ---
 
