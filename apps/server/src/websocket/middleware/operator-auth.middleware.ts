@@ -18,8 +18,16 @@ export class OperatorAuthGuard implements CanActivate {
     const client: Socket = context.switchToWs().getClient();
     
     // [OP_WS_TRACE] Guard activation (only for @SubscribeMessage, not handleConnection)
-    const eventName = context.switchToWs().getData()?.event || 'unknown';
-    this.logger.log(`[OP_WS_TRACE] Guard canActivate: socketId=${client.id}, event=${eventName}`);
+    // Check if this is a connection event - if so, skip guard (connection is handled in handleConnection)
+    const handler = context.getHandler();
+    const handlerName = handler?.name || 'unknown';
+    if (handlerName === 'handleConnection' || handlerName === 'handleDisconnect') {
+      // Guard should not run on connection/disconnect - these are handled in gateway
+      return true;
+    }
+    
+    const eventName = context.switchToWs().getData()?.event || handlerName;
+    this.logger.log(`[OP_WS_TRACE] Guard canActivate: socketId=${client.id}, event=${eventName}, handler=${handlerName}`);
     
     const devMode = this.config.get('OPERATOR_DEV_MODE') === 'true';
     const devToken = this.config.get('OPERATOR_DEV_TOKEN');
