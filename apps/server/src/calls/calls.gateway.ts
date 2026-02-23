@@ -157,6 +157,7 @@ export class CallsGateway {
     // Forward offer to both namespaces (excluding sender)
     const offerPayload = {
       ...ringPayload,
+    this.logger.log([CALL_ANSWER_ENTRY] ns= socketId= callId= conversationId=\);
       sdp: dto.sdp,
     };
 

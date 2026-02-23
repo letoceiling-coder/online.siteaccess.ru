@@ -93,6 +93,11 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           }
         } catch (e) {
           // Invalid referer URL
+      // Add packet logging middleware for widget socket
+      client.use((packet, next) => {
+      this.logger.log([WIDGET_PACKET] socketId= event= namespace=\);
+        next();
+      });
         }
       }
       
@@ -447,6 +452,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       this.logger.error(`[TRACE] [WIDGET] call:offer error: callId=${payload?.callId}, error=${errorMessage}`);
       client.emit('call:failed', { callId: payload?.callId, reason: 'offer_failed' });
+    this.logger.log([CALL_ANSWER_ENTRY] ns= socketId= callId= conversationId=\);
       return { ok: false, error: errorMessage };
     }
   }
