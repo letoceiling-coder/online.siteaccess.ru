@@ -16,6 +16,11 @@ export class OperatorAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client: Socket = context.switchToWs().getClient();
+    
+    // [OP_WS_TRACE] Guard activation (only for @SubscribeMessage, not handleConnection)
+    const eventName = context.switchToWs().getData()?.event || 'unknown';
+    this.logger.log(`[OP_WS_TRACE] Guard canActivate: socketId=${client.id}, event=${eventName}`);
+    
     const devMode = this.config.get('OPERATOR_DEV_MODE') === 'true';
     const devToken = this.config.get('OPERATOR_DEV_TOKEN');
     const clientDevToken = client.handshake.headers['x-operator-dev-token'] as string;
@@ -26,6 +31,7 @@ export class OperatorAuthGuard implements CanActivate {
       if (channelId && typeof channelId === 'string') {
         client.data.channelId = channelId;
         client.data.isDev = true;
+        this.logger.log(`[OP_WS_TRACE] Guard: DEV mode enabled for socketId=${client.id}`);
         return true;
       }
     }
@@ -34,13 +40,13 @@ export class OperatorAuthGuard implements CanActivate {
     const token = client.handshake.auth?.token || client.handshake.query?.token;
 
     if (!token || typeof token !== 'string') {
-      this.logger.warn(`[TRACE_WS] Operator auth failed: no token, clientId=${client.id}`);
+      this.logger.warn(`[OP_WS_TRACE] Guard auth failed: no token, clientId=${client.id}, event=${eventName}`);
       throw new UnauthorizedException('Token required');
     }
 
-    // Log token prefix (first 12 chars) for debugging
-    const tokenPrefix = token.substring(0, 12);
-    this.logger.log(`[TRACE_WS] Operator auth attempt: clientId=${client.id}, tokenPrefix=${tokenPrefix}...`);
+    // Log token prefix (first 8 chars) for debugging
+    const tokenPrefix = token.substring(0, 8);
+    this.logger.log(`[OP_WS_TRACE] Guard auth attempt: clientId=${client.id}, event=${eventName}, tokenPrefix=${tokenPrefix}...`);
 
     try {
       const payload = this.jwtService.verify(token, {
@@ -58,16 +64,19 @@ export class OperatorAuthGuard implements CanActivate {
       });
 
       if (!membership) {
+        this.logger.warn(`[OP_WS_TRACE] Guard auth failed: membership not found, clientId=${client.id}, event=${eventName}`);
         throw new UnauthorizedException('Membership not found');
       }
 
       client.data.userId = payload.userId;
       client.data.channelId = payload.channelId;
       client.data.role = payload.role;
-      this.logger.log(`[TRACE_WS] Operator auth success: clientId=${client.id}, userId=${payload.userId}, channelId=${payload.channelId}`);
+      this.logger.log(`[OP_WS_TRACE] Guard auth success: clientId=${client.id}, event=${eventName}, userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
       return true;
     } catch (error: any) {
-      this.logger.warn(`[TRACE_WS] Operator auth failed: clientId=${client.id}, error=${error.message || 'unknown'}`);
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`[OP_WS_TRACE] Guard auth failed: clientId=${client.id}, event=${eventName}, error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
       throw new UnauthorizedException('Invalid token');
     }
   }

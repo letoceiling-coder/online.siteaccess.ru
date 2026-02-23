@@ -334,18 +334,25 @@ async function runE2E() {
       );
     }
 
-    // Verify all sent messages are in history
-    const historyTexts = new Set([...widgetHistory, ...operatorHistory].map(m => m.text).filter(Boolean));
+    // Verify all sent messages are in history by clientMessageId (guaranteed unique)
+    const allHistory = [...widgetHistory, ...operatorHistory];
+    const historyByClientId = new Map();
+    for (const msg of allHistory) {
+      if (msg.clientMessageId) {
+        historyByClientId.set(msg.clientMessageId, msg);
+      }
+    }
     
+    // Verify all sent messages exist by clientMessageId
     for (const msg of [...widgetMessages, ...operatorMessages]) {
-      if (!historyTexts.has(msg.text)) {
-        throw new Error(`Message not found in history: ${msg.text}`);
+      if (!historyByClientId.has(msg.clientMessageId)) {
+        throw new Error(`Message not found in history by clientMessageId: ${msg.clientMessageId} (text: ${msg.text})`);
       }
     }
 
-    // Verify dropped message is in history (should be resent and persisted)
-    if (!historyTexts.has(droppedMessageText)) {
-      throw new Error(`Dropped message not found in history after reconnect: ${droppedMessageText}`);
+    // Verify dropped message is in history by clientMessageId (should be resent and persisted)
+    if (!historyByClientId.has(droppedMessageId)) {
+      throw new Error(`Dropped message not found in history after reconnect: clientMessageId=${droppedMessageId}, text=${droppedMessageText}`);
     }
 
     console.log('  ✓ All messages found in history');

@@ -41,18 +41,34 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleConnection(client: Socket) {
     // Guard runs for @SubscribeMessage but not for handleConnection
     // So we need to authenticate here to get channelId for room joining
+    
+    // [OP_WS_TRACE] Connection start diagnostics
+    const authKeys = Object.keys(client.handshake.auth || {});
+    const queryKeys = Object.keys(client.handshake.query || {});
+    const headerKeys = Object.keys(client.handshake.headers || {});
+    const origin = client.handshake.headers.origin || client.handshake.headers.referer || 'missing';
+    
+    this.logger.log(`[OP_WS_TRACE] Connection start: socketId=${client.id}, authKeys=[${authKeys.join(',')}], queryKeys=[${queryKeys.join(',')}], headerKeys=[${headerKeys.slice(0, 10).join(',')}...], origin=${origin}`);
+    
     const token = client.handshake.auth?.token || client.handshake.query?.token;
     
     if (!token || typeof token !== 'string') {
-      this.logger.warn(`[REALTIME] Operator connection rejected: no token, clientId=${client.id}`);
-      client.disconnect();
+      this.logger.warn(`[OP_WS_TRACE] Connection rejected: no token, clientId=${client.id}`);
+      client.disconnect(true);
       return;
     }
+
+    // [OP_WS_TRACE] Token presence
+    const tokenPrefix = token.substring(0, 8);
+    const tokenLength = token.length;
+    this.logger.log(`[OP_WS_TRACE] Token found: length=${tokenLength}, prefix=${tokenPrefix}...`);
 
     try {
       const payload = this.jwtService.verify(token, {
         secret: this.config.get('OPERATOR_JWT_SECRET') || this.config.get('JWT_SECRET') || 'dev-secret',
       });
+
+      this.logger.log(`[OP_WS_TRACE] JWT verify success: userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
 
       // Verify membership (guard will do this too, but we need channelId here)
       const membership = await this.prisma.channelMember.findUnique({
@@ -65,8 +81,8 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
       });
 
       if (!membership) {
-        this.logger.warn(`[REALTIME] Operator connection rejected: membership not found, clientId=${client.id}`);
-        client.disconnect();
+        this.logger.warn(`[OP_WS_TRACE] Connection rejected: membership not found, clientId=${client.id}, userId=${payload.userId}, channelId=${payload.channelId?.substring(0, 8)}...`);
+        client.disconnect(true);
         return;
       }
 
@@ -77,15 +93,17 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       // Join channel room (CRITICAL for receiving messages from widget)
       client.join(`channel:${payload.channelId}`);
-      this.logger.log(`[REALTIME] Operator connected: clientId=${client.id}, channel: ${payload.channelId}, joined room: channel:${payload.channelId}`);
+      this.logger.log(`[OP_WS_TRACE] Connection success: clientId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., joined room: channel:${payload.channelId}`);
     } catch (error) {
-      this.logger.warn(`[REALTIME] Operator connection rejected: invalid token, clientId=${client.id}, error=${error instanceof Error ? error.message : 'unknown'}`);
-      client.disconnect();
+      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`[OP_WS_TRACE] Connection rejected: clientId=${client.id}, error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 200)}` : ''}`);
+      client.disconnect(true);
     }
   }
 
-  async handleDisconnect(client: Socket) {
-    this.logger.log(`Operator disconnected: ${client.id}`);
+  async handleDisconnect(client: Socket, reason: string) {
+    this.logger.log(`[OP_WS_TRACE] Operator disconnected: socketId=${client.id}, reason=${reason || 'unknown'}`);
   }
 
   @SubscribeMessage('message:send')
