@@ -49,7 +49,25 @@ export class CallsGateway {
       return;
     }
     
-    const namespaceServer = srv.of(namespace);
+    // Ensure srv is a Socket.IO Server instance
+    // If it's a namespace, use it directly; otherwise get namespace
+    let namespaceServer: any;
+    if (typeof srv.of === 'function') {
+      namespaceServer = srv.of(namespace);
+    } else if (srv.nsp && srv.nsp.name === namespace) {
+      // Already a namespace
+      namespaceServer = srv;
+    } else {
+      // Try to get namespace from server property
+      const mainServer = (srv as any).server || (srv as any).io;
+      if (mainServer && typeof mainServer.of === 'function') {
+        namespaceServer = mainServer.of(namespace);
+      } else {
+        this.logger.error(`[CALL_TRACE] Cannot forward ${event}: cannot get namespace ${namespace} from server`);
+        return;
+      }
+    }
+    
     const room = `conversation:${conversationId}`;
     
     this.logger.log(`[CALL_TRACE] Forwarding ${event} to ${namespace} room ${room}${excludeClientId ? ` (excluding ${excludeClientId})` : ''}`);
@@ -146,18 +164,43 @@ export class CallsGateway {
     };
 
     // Forward to widget namespace: use conversation room (widgets join on connect)
-    // Also try channel room as fallback
-    this.forwardCallEvent('/widget', 'call:offer', offerPayload, dto.conversationId, client.id, server);
-    // Also emit to channel room as fallback for widgets
-    const widgetNamespace = server.of('/widget');
+    // Get widget namespace from server
+    let widgetNamespace: any;
+    if (server && typeof server.of === 'function') {
+      widgetNamespace = server.of('/widget');
+    } else {
+      const mainServer = (server as any)?.server || (server as any)?.io;
+      if (mainServer && typeof mainServer.of === 'function') {
+        widgetNamespace = mainServer.of('/widget');
+      }
+    }
+    
     if (widgetNamespace) {
-      const channelRoom = `channel:${dto.channelId}`;
-      widgetNamespace.to(channelRoom).except(client.id).emit('call:offer', offerPayload);
-      this.logger.log(`[CALL_TRACE] Forwarded call:offer to widget channel room: ${channelRoom}`);
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      widgetNamespace.to(conversationRoom).except(client.id).emit('call:offer', offerPayload);
+      this.logger.log(`[CALL_TRACE] Forwarded call:offer to widget namespace room ${conversationRoom}`);
+    } else {
+      this.logger.error(`[CALL_TRACE] Cannot get widget namespace for call:offer`);
     }
 
     // Forward to operator namespace: use conversation room (operators join explicitly)
-    this.forwardCallEvent('/operator', 'call:offer', offerPayload, dto.conversationId, client.id, server);
+    let operatorNamespace: any;
+    if (server && typeof server.of === 'function') {
+      operatorNamespace = server.of('/operator');
+    } else {
+      const mainServer = (server as any)?.server || (server as any)?.io;
+      if (mainServer && typeof mainServer.of === 'function') {
+        operatorNamespace = mainServer.of('/operator');
+      }
+    }
+    
+    if (operatorNamespace) {
+      const conversationRoom = `conversation:${dto.conversationId}`;
+      operatorNamespace.to(conversationRoom).except(client.id).emit('call:offer', offerPayload);
+      this.logger.log(`[CALL_TRACE] Forwarded call:offer to operator namespace room ${conversationRoom}`);
+    } else {
+      this.logger.error(`[CALL_TRACE] Cannot get operator namespace for call:offer`);
+    }
 
     this.logger.log(`[CALL_TRACE] Call offer forwarded: callId=${dto.callId}, conversationId=${dto.conversationId}, fromRole=${fromRole}`);
   }
