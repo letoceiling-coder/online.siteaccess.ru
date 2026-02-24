@@ -448,19 +448,19 @@ function App() {
       });
 
       ws.on('call:answer', (data: any) => {
-        if (data.callId === callState.callId) {
+        if (data.callId === callStoreState.callId) {
           setCallState(prev => ({ ...prev, status: 'in_call' }));
         }
       });
 
       ws.on('call:hangup', (data: any) => {
-        if (data.callId === callState.callId || data.callId === callState.incomingCall?.callId) {
+        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
           setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
         }
       });
 
       ws.on('call:busy', (data: any) => {
-        if (data.callId === callState.callId) {
+        if (data.callId === callStoreState.callId) {
           setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
         }
       });
@@ -865,7 +865,7 @@ function App() {
               <>
                 <div className="chat-header">
                   <h3>Chat</h3>
-                  {callState.status === 'idle' && (
+                  {callStoreState.state === 'idle' && (
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={() => handleStartCall('audio')} style={{ padding: '6px 12px', fontSize: '12px' }}>
                         Call
@@ -875,20 +875,20 @@ function App() {
                       </button>
                     </div>
                   )}
-                  {callState.status === 'calling' && <div>Calling...</div>}
-                  {callState.status === 'in_call' && (
+                  {callStoreState.state === 'calling' && <div>Calling...</div>}
+                  {callStoreState.state === 'in_call' && (
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span>In call ({callState.kind})</span>
+                      <span>In call ({callStoreState.kind})</span>
                       <button onClick={handleHangup} style={{ padding: '6px 12px', fontSize: '12px', background: '#dc3545' }}>
                         Hang up
                       </button>
                     </div>
                   )}
                 </div>
-                {callState.incomingCall && callState.status === 'ringing' && (
+                {callStoreState.incomingCall && callStoreState.state === 'ringing' && (
                   <div style={{ padding: '12px', background: '#f0f0f0', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <strong>Incoming {callState.incomingCall.kind} call</strong>
+                      <strong>Incoming {callStoreState.incomingCall.kind} call</strong>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={handleAcceptCall} style={{ padding: '8px 16px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>
