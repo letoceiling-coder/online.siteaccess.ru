@@ -71,11 +71,29 @@ export class CallsService {
     callId: string,
     status: 'ringing' | 'connecting' | 'in_call' | 'ended' | 'failed' | 'busy',
     reason?: string,
+    metadata?: { usedRelay?: boolean; connectionTimeMs?: number },
   ) {
     const updateData: any = { status };
     
-    if (status === 'in_call' && !updateData.startedAt) {
+    if (status === 'connecting') {
       updateData.startedAt = new Date();
+    }
+    
+    if (status === 'in_call') {
+      const record = await (this.prisma as any).callRecord.findUnique({
+        where: { id: callId },
+        select: { startedAt: true },
+      });
+      
+      if (record?.startedAt) {
+        updateData.connectedAt = new Date();
+        const connectionTime = Date.now() - new Date(record.startedAt).getTime();
+        updateData.connectionTimeMs = connectionTime;
+      }
+      
+      if (metadata?.usedRelay !== undefined) {
+        updateData.usedRelay = metadata.usedRelay;
+      }
     }
     
     if (status === 'ended' || status === 'failed' || status === 'busy') {
@@ -83,9 +101,18 @@ export class CallsService {
       if (reason) {
         updateData.endedReason = reason;
       }
+      
+      const record = await (this.prisma as any).callRecord.findUnique({
+        where: { id: callId },
+        select: { startedAt: true, connectedAt: true },
+      });
+      
+      if (record?.startedAt) {
+        const duration = Date.now() - new Date(record.startedAt).getTime();
+        updateData.durationMs = duration;
+      }
     }
 
-    // @ts-ignore - Prisma client may not have callRecord yet, but it should after migration
     return (this.prisma as any).callRecord.update({
       where: { id: callId },
       data: updateData,
@@ -136,5 +163,42 @@ export class CallsService {
     return (this.prisma as any).callRecord.findUnique({
       where: { id: callId },
     });
+  }
+
+  async getCallMetrics(channelId?: string) {
+    const where: any = {};
+    if (channelId) {
+      where.channelId = channelId;
+    }
+
+    const calls = await (this.prisma as any).callRecord.findMany({
+      where,
+      select: {
+        status: true,
+        durationMs: true,
+        connectionTimeMs: true,
+        usedRelay: true,
+        endedReason: true,
+      },
+    });
+
+    const totalCalls = calls.length;
+    const successfulCalls = calls.filter((c: any) => c.status === 'ended' && c.durationMs).length;
+    const busyCalls = calls.filter((c: any) => c.status === 'busy' || c.endedReason === 'busy').length;
+    const failedCalls = calls.filter((c: any) => c.status === 'failed' || c.endedReason === 'failed' || c.endedReason === 'timeout').length;
+    const relayCalls = calls.filter((c: any) => c.usedRelay === true).length;
+
+    const durations = calls.filter((c: any) => c.durationMs).map((c: any) => c.durationMs);
+    const connectionTimes = calls.filter((c: any) => c.connectionTimeMs).map((c: any) => c.connectionTimeMs);
+
+    return {
+      totalCalls,
+      successRate: totalCalls > 0 ? (successfulCalls / totalCalls) * 100 : 0,
+      averageDuration: durations.length > 0 ? durations.reduce((a: number, b: number) => a + b, 0) / durations.length : 0,
+      averageConnectionTime: connectionTimes.length > 0 ? connectionTimes.reduce((a: number, b: number) => a + b, 0) / connectionTimes.length : 0,
+      relayUsagePercent: totalCalls > 0 ? (relayCalls / totalCalls) * 100 : 0,
+      busyRate: totalCalls > 0 ? (busyCalls / totalCalls) * 100 : 0,
+      failedRate: totalCalls > 0 ? (failedCalls / totalCalls) * 100 : 0,
+    };
   }
 }
