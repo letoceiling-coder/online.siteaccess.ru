@@ -425,30 +425,528 @@ function App() {
       });
 
       // Call event handlers
-      ws.on(" call:ring, (data: any) => {
- if (data.conversationId === selectedConversation) {
- callStateMachine.transition(
-inging, { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
- }
- });
-      ws.on(" call:offer, (data: any) => {
- if (data.conversationId === selectedConversation && data.fromRole === isitor) {
- callStateMachine.transition(
-inging, { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: isitor, incomingCall: { callId: data.callId, fromRole: isitor, kind: data.kind } });
- }
- });
+      ws.on('call:ring', (data: any) => {
+        if (data.conversationId === selectedConversation) {
+          callStateMachine.transition('ringing', { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
+        }
+
+      ws.on('call:offer', (data: any) => {
+        if (data.conversationId === selectedConversation && data.fromRole === 'visitor') {
+          callStateMachine.transition('ringing', { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: 'visitor', incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind } });
         }
       });
-      ws.on(" call:hangup, (data: any) => {
-      ws.on(" call:busy, (data: any) => {
- if (data.callId === callStoreState.callId) {
- callStateMachine.transition(busy);
- }
- });
- if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
- callStateMachine.transition(ended);
- }
- });
+      });
+
+      ws.on('call:hangup', (data: any) => {
+        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
+          setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
+        }
+      });
+
+      ws.on('call:busy', (data: any) => {
+        if (data.callId === callStoreState.callId) {
+      ws.on('call:hangup', (data: any) => {
+        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
         }
       });
         console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
+      ws.on('call:busy', (data: any) => {
+        if (data.callId === callStoreState.callId) {
+        }
+      });
+
+          
+          // Update lastSeenCreatedAt from the latest message in sync response
+          if (mergedMessages.length > 0) {
+            const latestSyncMsg = mergedMessages[mergedMessages.length - 1];
+            if (latestSyncMsg.createdAt && (!lastSeenCreatedAtRef.current || latestSyncMsg.createdAt > lastSeenCreatedAtRef.current)) {
+              lastSeenCreatedAtRef.current = latestSyncMsg.createdAt;
+              saveLastSeenCreatedAt(latestSyncMsg.createdAt);
+            }
+          }
+
+          return {
+            ...prev,
+            [data.conversationId]: mergedMessages,
+          };
+        });
+      });
+
+      setSocket(ws);
+    } catch (err: any) {
+      setError(err.message || 'Connection failed');
+      setConnected(false);
+    }
+  };
+
+  // Helper to merge messages with deduplication and stable sorting
+  const mergeMessages = (existing: Message[], incoming: Message[]): Message[] => {
+    const allMessages = [...existing, ...incoming];
+    const uniqueMessages = new Map<string, Message>();
+
+    for (const msg of allMessages) {
+      const key = msg.serverMessageId || msg.clientMessageId;
+      if (key) {
+        // Prefer serverMessageId if available, otherwise clientMessageId
+        // Never treat undefined/null/"" as valid dedupe keys
+        if (!uniqueMessages.has(key) || (msg.serverMessageId && !uniqueMessages.get(key)?.serverMessageId)) {
+          uniqueMessages.set(key, msg);
+        }
+      }
+    }
+    
+    // Stable sort: createdAt ASC, then id ASC
+    const sorted = Array.from(uniqueMessages.values()).sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      if (dateA !== dateB) return dateA - dateB;
+      // Stable sort by serverMessageId if createdAt is same
+      const idA = a.serverMessageId || a.clientMessageId || '';
+      const idB = b.serverMessageId || b.clientMessageId || '';
+      return idA.localeCompare(idB);
+    });
+    return sorted;
+  };
+
+  const handleSelectConversation = async (conversationId: string) => {
+    setSelectedConversation(conversationId);
+    setShowScrollButton(false);
+
+    if (!operatorToken) return;
+
+    // Join conversation room for realtime updates
+    if (socket) {
+      socket.emit('operator:conversation:join', { conversationId });
+    }
+
+    // If we already have messages for this conversation, use them
+    if (messagesByConversation[conversationId] && messagesByConversation[conversationId].length > 0) {
+      // Messages already loaded from WS, but fetch to ensure we have all history
+      try {
+        const response = await fetch(
+          `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
+          {
+            headers: {
+              Authorization: `Bearer ${operatorToken}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Merge with existing messages, deduplicate
+          setMessagesByConversation((prev) => {
+            const existing = prev[conversationId] || [];
+            const fetched = data as Message[];
+            
+            // Create a map of existing message IDs
+            const existingIds = new Set(existing.map((m) => m.serverMessageId));
+            
+            // Add only new messages from fetch
+            const newMessages = fetched.filter((m) => !existingIds.has(m.serverMessageId));
+            
+            // Combine: existing (from WS) + new (from fetch), sorted by createdAt ASC, then id ASC (stable)
+            const combined = mergeMessages(existing, fetched);
+            
+            return {
+              ...prev,
+              [conversationId]: combined,
+            };
+          });
+          
+          // Scroll to bottom after loading history
+          setTimeout(() => scrollToBottom('auto'), 100);
+        }
+      } catch (err) {
+        console.error('Failed to fetch messages:', err);
+      }
+    } else {
+      // No messages yet, fetch from API
+      try {
+        const response = await fetch(
+          `${API_URL}/api/operator/messages?conversationId=${conversationId}&limit=50`,
+          {
+            headers: {
+              Authorization: `Bearer ${operatorToken}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch messages');
+        }
+
+        const data = await response.json();
+        setMessagesByConversation((prev) => ({
+          ...prev,
+          [conversationId]: data,
+        }));
+        
+        // Scroll to bottom after loading history
+        setTimeout(() => scrollToBottom('auto'), 100);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load messages');
+      }
+    }
+  };
+
+  const sendMessageToServer = useCallback((message: Message) => {
+    if (!socket || !selectedConversation || !message.clientMessageId) return;
+
+    if (!socket.connected) {
+      console.warn('Socket not connected, message will be sent on reconnect');
+      return;
+    }
+
+    socket.emit('message:send', {
+      conversationId: selectedConversation,
+      text: message.text,
+      clientMessageId: message.clientMessageId,
+    });
+
+    // Start retry timer if no ACK received
+    scheduleRetry(message);
+  }, [socket, selectedConversation]);
+
+  const scheduleRetry = useCallback((message: Message) => {
+    if (!message.clientMessageId) return;
+
+    const retryCount = message.retryCount || 0;
+    if (retryCount >= maxRetries) {
+      console.error(`Message ${message.clientMessageId} failed after ${retryCount} retries`);
+      setMessagesByConversation((prev) => {
+        const updated = { ...prev };
+        if (updated[selectedConversation!]) {
+          const messages = updated[selectedConversation!];
+          const msgIndex = messages.findIndex((m) => m.clientMessageId === message.clientMessageId);
+          if (msgIndex >= 0) {
+            updated[selectedConversation!] = [...messages];
+            updated[selectedConversation!][msgIndex] = { ...messages[msgIndex], status: 'failed' };
+          }
+        }
+        return updated;
+      });
+      return;
+    }
+
+    const delay = retryDelays[Math.min(retryCount, retryDelays.length - 1)];
+    
+    const timer = setTimeout(() => {
+      if (pendingMessagesRef.current.has(message.clientMessageId!)) {
+        message.retryCount = (message.retryCount || 0) + 1;
+        console.log(`Retrying message ${message.clientMessageId} (attempt ${message.retryCount})`);
+        sendMessageToServer(message);
+      }
+    }, delay);
+
+    // Clear existing timer if any
+    const existingTimer = retryTimersRef.current.get(message.clientMessageId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    retryTimersRef.current.set(message.clientMessageId, timer);
+  }, [selectedConversation, sendMessageToServer]);
+
+  const resendPendingMessages = useCallback(() => {
+    if (pendingMessagesRef.current.size === 0) return;
+
+    console.log(`Resending ${pendingMessagesRef.current.size} pending messages`);
+    for (const [clientMessageId, message] of pendingMessagesRef.current.entries()) {
+      // Reset retry count on reconnect
+      message.retryCount = 0;
+      sendMessageToServer(message);
+    }
+  }, [sendMessageToServer]);
+
+  const requestSync = useCallback((conversationId: string) => {
+    if (!socket || !socket.connected) return;
+
+    const sinceCreatedAt = lastSeenCreatedAtRef.current || null;
+    console.log(`Requesting sync for conversation ${conversationId} since: ${sinceCreatedAt || 'beginning'}`);
+
+    socket.emit('sync:request', {
+      conversationId,
+      sinceCreatedAt,
+      limit: 100,
+    });
+  }, [socket]);
+
+  const saveLastSeenCreatedAt = useCallback((createdAt: string) => {
+    try {
+      localStorage.setItem('operator_lastSeenCreatedAt', createdAt);
+    } catch (e) {
+      console.warn('Failed to save lastSeenCreatedAt', e);
+    }
+  }, []);
+
+  const loadLastSeenCreatedAt = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('operator_lastSeenCreatedAt');
+      if (stored) {
+        lastSeenCreatedAtRef.current = stored;
+      }
+    } catch (e) {
+      console.warn('Failed to load lastSeenCreatedAt', e);
+    }
+  }, []);
+
+  // Load lastSeenCreatedAt on mount
+  useEffect(() => {
+    loadLastSeenCreatedAt();
+  }, [loadLastSeenCreatedAt]);
+
+  const handleSendMessage = () => {
+    if (!messageInput.trim() || !socket || !selectedConversation) return;
+
+    // Generate unique clientMessageId
+    const clientMessageId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const trimmedText = messageInput.trim();
+    const createdAt = new Date().toISOString();
+
+    // Create message object
+    const message: Message = {
+      clientMessageId,
+      text: trimmedText,
+      senderType: 'operator',
+      createdAt,
+      status: 'pending',
+      retryCount: 0,
+    };
+
+    // Add to local messages immediately (optimistic update)
+    setMessagesByConversation((prev) => {
+      const existing = prev[selectedConversation] || [];
+      return {
+        ...prev,
+        [selectedConversation]: [...existing, message],
+      };
+    });
+
+    // Add to pending
+    pendingMessagesRef.current.set(clientMessageId, message);
+
+    // Send to server
+    sendMessageToServer(message);
+
+    setMessageInput('');
+    
+    // Scroll to bottom after sending message
+    setTimeout(() => scrollToBottom('smooth'), 100);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('operatorAccessToken');
+    localStorage.removeItem('operator_channel_id');
+    setOperatorToken(null);
+    setOperatorChannelId(null);
+    setConnected(false);
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+  };
+
+  return (
+    <div className="app">
+      {!connected ? (
+        <div className="connect-panel">
+          <h1>Operator Web</h1>
+          <div className="form-group">
+            <label>Email:</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+            />
+          </div>
+          <div className="form-group">
+            <label>Password:</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+            />
+          </div>
+          <div className="form-group">
+            <label>Project ID (UUID):</label>
+            <input
+              type="text"
+              value={channelId}
+              onChange={(e) => setChannelId(e.target.value)}
+              placeholder="Enter project UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)"
+              pattern="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+            />
+            <small style={{ color: '#666', fontSize: '12px', display: 'block', marginTop: '4px' }}>
+              This is the Project/Channel UUID from your portal dashboard, not the token.
+            </small>
+          </div>
+          {error && <div className="error">{error}</div>}
+          <button onClick={handleLogin} className="connect-btn">
+            Login
+          </button>
+        </div>
+      ) : (
+        <div className="operator-panel">
+          <div className="sidebar">
+            <div className="sidebar-header">
+              <h2>Conversations</h2>
+              <div className="online-count">Online: {onlineVisitors}</div>
+              <div className="sound-controls" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={soundEnabled}
+                    onChange={(e) => {
+                      setSoundEnabled(e.target.checked);
+                      localStorage.setItem('operator_sound_enabled', String(e.target.checked));
+                    }}
+                  />
+                  Sound
+                </label>
+                {!soundUnlocked && (
+                  <button
+                    onClick={unlockSoundOnce}
+                    style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer' }}
+                  >
+                    Enable sound
+                  </button>
+                )}
+              </div>
+              <button onClick={handleLogout} className="logout-btn">
+                Logout
+              </button>
+            </div>
+            <div className="conversations-list">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.conversationId}
+                  className={`conversation-item ${
+                    selectedConversation === conv.conversationId ? 'active' : ''
+                  }`}
+                  onClick={() => handleSelectConversation(conv.conversationId)}
+                >
+                  <div className="conversation-visitor">{conv.visitorExternalId}</div>
+                  <div className="conversation-preview">
+                    {conv.lastMessageText || 'No messages'}
+                  </div>
+                  <div className="conversation-time">
+                    {new Date(conv.updatedAt).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+              {conversations.length === 0 && (
+                <div className="empty-state">No conversations</div>
+              )}
+            </div>
+          </div>
+          <div className="chat-area">
+            {selectedConversation ? (
+              <>
+                <div className="chat-header">
+                  <h3>Chat</h3>
+                  {callStoreState.state === 'idle' && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => handleStartCall('audio')} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        Call
+                      </button>
+                      <button onClick={() => handleStartCall('video')} style={{ padding: '6px 12px', fontSize: '12px' }}>
+                        Video
+                      </button>
+                    </div>
+                  )}
+                  {callStoreState.state === 'calling' && <div>Calling...</div>}
+                  {callStoreState.state === 'in_call' && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span>In call ({callStoreState.kind})</span>
+                      <button onClick={handleHangup} style={{ padding: '6px 12px', fontSize: '12px', background: '#dc3545' }}>
+                        Hang up
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {callStoreState.incomingCall && callStoreState.state === 'ringing' && (
+                  <div style={{ padding: '12px', background: '#f0f0f0', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong>Incoming {callStoreState.incomingCall.kind} call</strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={handleAcceptCall} style={{ padding: '8px 16px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>
+                        Accept
+                      </button>
+                      <button onClick={handleDeclineCall} style={{ padding: '8px 16px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div 
+                  className="messages-container"
+                  ref={messagesWrapRef}
+                  onScroll={() => {
+                    if (isNearBottom()) {
+                      setShowScrollButton(false);
+                    } else {
+                      setShowScrollButton(true);
+                    }
+                  }}
+                >
+                  {messages.map((msg) => (
+                    <div key={msg.serverMessageId} className={`message ${msg.senderType}`}>
+                      <div className="message-text">{msg.text}</div>
+                      <div className="message-time">
+                        {new Date(msg.createdAt).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={endRef} />
+                  {showScrollButton && (
+                    <button
+                      onClick={() => {
+                        scrollToBottom(true);
+                        setShowScrollButton(false);
+                      }}
+                      style={{
+                        position: 'sticky',
+                        bottom: '10px',
+                        alignSelf: 'center',
+                        padding: '8px 16px',
+                        background: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        zIndex: 10,
+                      }}
+                    >
+                      New messages / Scroll to bottom
+                    </button>
+                  )}
+                </div>
+                <div className="chat-input-container">
+                  <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Type a message..."
+                    className="chat-input"
+                  />
+                  <button onClick={handleSendMessage} className="send-btn">
+                    Send
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="no-selection">Select a conversation to start chatting</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
