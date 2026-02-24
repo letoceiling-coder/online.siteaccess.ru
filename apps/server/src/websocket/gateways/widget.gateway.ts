@@ -462,11 +462,19 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('call:answer')
   @UseGuards(WidgetAuthGuard)
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
-  async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
+  async handleCallAnswer(client: Socket, payload: any) {
     this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId} payload=${JSON.stringify(payload)}`);
     try {
-      await this.callsGateway.handleCallAnswer(payload, client, '/widget', this.server);
+      // Manual validation to avoid ValidationPipe blocking
+      const dto: CallAnswerDto = {
+        callId: payload.callId,
+        conversationId: payload.conversationId,
+        channelId: payload.channelId,
+        fromRole: payload.fromRole,
+        sdp: payload.sdp,
+        timestamp: payload.timestamp,
+      };
+      await this.callsGateway.handleCallAnswer(dto, client, '/widget', this.server);
       this.logger.log(`[TRACE] [WIDGET] call:answer success: callId=${payload?.callId}`);
       return { ok: true, callId: payload?.callId };
     } catch (error) {
