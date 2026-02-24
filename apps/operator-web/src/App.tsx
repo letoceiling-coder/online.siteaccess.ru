@@ -428,17 +428,13 @@ function App() {
       ws.on('call:ring', (data: any) => {
         if (data.conversationId === selectedConversation) {
           callStateMachine.transition('ringing', { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
-      });
+        }
 
       ws.on('call:offer', (data: any) => {
         if (data.conversationId === selectedConversation && data.fromRole === 'visitor') {
-          setCallState(prev => ({
-            ...prev,
-            callId: data.callId,
-            incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind },
-            status: 'ringing',
           callStateMachine.transition('ringing', { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: 'visitor', incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind } });
         }
+      });
       });
 
       ws.on('call:hangup', (data: any) => {
@@ -449,19 +445,16 @@ function App() {
 
       ws.on('call:busy', (data: any) => {
         if (data.callId === callStoreState.callId) {
-          callStateMachine.transition('accepted'); setTimeout(() => callStateMachine.transition('connecting'), 100); setTimeout(() => callStateMachine.transition('in_call'), 500);
+      ws.on('call:hangup', (data: any) => {
+        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
+        }
+      });
+        console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
+      ws.on('call:busy', (data: any) => {
+        if (data.callId === callStoreState.callId) {
         }
       });
 
-      ws.on('sync:response', (data: any) => {
-        console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
-          callStateMachine.transition('ended');
-
-        setMessagesByConversation((prev) => {
-          const existingMessages = prev[data.conversationId] || [];
-          const newMessages = data.messages as Message[];
-
-          callStateMachine.transition('busy');
           
           // Update lastSeenCreatedAt from the latest message in sync response
           if (mergedMessages.length > 0) {
