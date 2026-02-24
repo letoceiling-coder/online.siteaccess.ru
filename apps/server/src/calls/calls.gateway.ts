@@ -228,7 +228,15 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
       throw new WsException('FORBIDDEN');
     }
 
@@ -314,7 +322,15 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
       throw new WsException('FORBIDDEN');
     }
 
@@ -347,7 +363,15 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
       throw new WsException('FORBIDDEN');
     }
 
@@ -384,7 +408,15 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
       throw new WsException('FORBIDDEN');
     }
 
