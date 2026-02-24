@@ -16,6 +16,7 @@ import { CallOfferDto } from '../../calls/dto/call-offer.dto';
 import { CallAnswerDto } from '../../calls/dto/call-answer.dto';
 import { CallIceDto } from '../../calls/dto/call-ice.dto';
 import { CallHangupDto } from '../../calls/dto/call-hangup.dto';
+import { CallRelayDetectedDto } from '../../calls/dto/call-relay-detected.dto';
 import { WsException } from '@nestjs/websockets';
 
 @WebSocketGateway({
@@ -449,32 +450,21 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('call:hangup')
+  @SubscribeMessage('call:relay-detected')
   @UseGuards(OperatorAuthGuard)
-  async handleCallHangup(client: Socket, payload: CallHangupDto) {
-    this.logger.log(`[TRACE] [OP] call:hangup received: callId=${payload?.callId}`);
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
+  async handleRelayDetected(client: Socket, payload: any) {
+    this.logger.log([TRACE] [OP] call:relay-detected received: callId=);
     try {
-      await this.callsGateway.handleCallHangup(payload, client, '/operator', this.server);
-      this.logger.log(`[TRACE] [OP] call:hangup success: callId=${payload?.callId}`);
-      return { ok: true, callId: payload?.callId };
+      const dto = payload as CallRelayDetectedDto;
+      await this.callsGateway.handleRelayDetected(dto, client, '/operator', this.server);
+      this.logger.log([TRACE] [OP] call:relay-detected success: callId=);
+      return { ok: true, callId: dto.callId };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
-      this.logger.error(`[TRACE] [OP] call:hangup error: callId=${payload?.callId}, error=${errorMessage}`);
+      this.logger.error([TRACE] [OP] call:relay-detected error: callId=, error=);
       return { ok: false, error: errorMessage };
     }
   }
 
-  @SubscribeMessage('call:busy')
-  @UseGuards(OperatorAuthGuard)
-  async handleCallBusy(client: Socket, payload: CallHangupDto) {
-    this.logger.log(`[TRACE] [OP] call:busy received: callId=${payload?.callId}`);
-    try {
-      await this.callsGateway.handleCallBusy(payload, client, '/operator', this.server);
-      this.logger.log(`[TRACE] [OP] call:busy success: callId=${payload?.callId}`);
-      return { ok: true, callId: payload?.callId };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'unknown';
-      this.logger.error(`[TRACE] [OP] call:busy error: callId=${payload?.callId}, error=${errorMessage}`);
-      return { ok: false, error: errorMessage };
-    }
-  }
-}
+

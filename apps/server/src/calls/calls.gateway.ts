@@ -15,6 +15,7 @@ import { CallOfferDto } from './dto/call-offer.dto';
 import { CallAnswerDto } from './dto/call-answer.dto';
 import { CallIceDto } from './dto/call-ice.dto';
 import { CallHangupDto } from './dto/call-hangup.dto';
+import { CallRelayDetectedDto } from './dto/call-relay-detected.dto';
 import { WidgetAuthGuard } from '../websocket/middleware/widget-auth.middleware';
 import { OperatorAuthGuard } from '../websocket/middleware/operator-auth.middleware';
 
@@ -419,5 +420,49 @@ export class CallsGateway {
     this.forwardCallEvent('/operator', 'call:busy', payload, conversationId, client.id, server);
 
     this.logger.log(`Call busy: callId=${dto.callId}`);
+  }
+}
+
+  async handleRelayDetected(
+    dto: CallRelayDetectedDto,
+    client: Socket,
+    namespace: '/widget' | '/operator',
+    server: Server,
+  ) {
+    const channelId = client.data.channelId;
+    const conversationId = client.data.conversationId;
+    const userId = client.data.userId;
+    const visitorId = client.data.visitorId;
+
+    // Verify access
+    const hasAccess = await this.callsService.verifyConversationAccess(
+      dto.conversationId,
+      dto.channelId,
+      userId,
+      visitorId,
+    );
+
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
+    }
+
+    // Verify callId exists
+    const callRecord = await this.callsService.getCallRecord(dto.callId);
+    if (!callRecord) {
+      this.logger.warn([RELAY_DETECTED] Call record not found: callId=);
+      return; // Ignore invalid callId
+    }
+
+    // Update CallRecord.usedRelay = true
+    if (dto.usedRelay) {
+      await (this.callsService as any).updateCallStatus(dto.callId, callRecord.status, undefined, { usedRelay: true });
+      this.logger.log([RELAY_DETECTED] Updated call record: callId=, usedRelay=true);
+    }
   }
 }
