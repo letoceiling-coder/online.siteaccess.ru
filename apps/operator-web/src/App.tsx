@@ -425,41 +425,29 @@ function App() {
       });
 
       // Call event handlers
-      ws.on('call:ring', (data: any) => {
-        if (data.conversationId === selectedConversation) {
-          callStateMachine.transition('ringing', { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
-        }
-
-      ws.on('call:offer', (data: any) => {
-        if (data.conversationId === selectedConversation && data.fromRole === 'visitor') {
-          callStateMachine.transition('ringing', { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: 'visitor', incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind } });
-        }
-      });
-      });
-
+      ws.on(" call:ring, (data: any) => {
+ if (data.conversationId === selectedConversation) {
+ callStateMachine.transition(inging, { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
+ }
+ });
+      ws.on(" call:offer, (data: any) => {
+ if (data.conversationId === selectedConversation && data.fromRole === isitor) {
+ callStateMachine.transition(inging, { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: isitor, incomingCall: { callId: data.callId, fromRole: isitor, kind: data.kind } });
+ }
+ });
       ws.on('call:hangup', (data: any) => {
         if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
-          setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
-        }
-      });
-
-      ws.on('call:busy', (data: any) => {
+      ws.on(" call:hangup, (data: any) => {
+ if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
+ callStateMachine.transition(ended);
+ }
+ });
         if (data.callId === callStoreState.callId) {
-      ws.on('call:hangup', (data: any) => {
-        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
-        }
-      });
-        console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
-      ws.on('call:busy', (data: any) => {
-        if (data.callId === callStoreState.callId) {
-        }
-      });
-
-          
-          // Update lastSeenCreatedAt from the latest message in sync response
-          if (mergedMessages.length > 0) {
-            const latestSyncMsg = mergedMessages[mergedMessages.length - 1];
-            if (latestSyncMsg.createdAt && (!lastSeenCreatedAtRef.current || latestSyncMsg.createdAt > lastSeenCreatedAtRef.current)) {
+      ws.on(" call:busy, (data: any) => {
+ if (data.callId === callStoreState.callId) {
+ callStateMachine.transition(busy);
+ }
+ });
               lastSeenCreatedAtRef.current = latestSyncMsg.createdAt;
               saveLastSeenCreatedAt(latestSyncMsg.createdAt);
             }
