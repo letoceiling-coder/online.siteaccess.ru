@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { createHmac } from 'crypto';
 
-@Controller('turn-credentials')
+@Controller('api/turn-credentials')
 export class TurnController {
   @Get()
   getTurnCredentials() {
