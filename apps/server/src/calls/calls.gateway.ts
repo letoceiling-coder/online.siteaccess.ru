@@ -206,8 +206,15 @@ export class CallsGateway {
  dto.conversationId,
  dto.channelId,
  client.data.userId,
- client.data.visitorId,
- );
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
+      throw new WsException(" FORBIDDEN);
+ }
+
+ if (isVisitor  ); ); dto.conversationId !== conversationId) {
+ throw new WsException(FORBIDDEN: Conversation mismatch);
+ }
 
  if (!hasAccess || dto.channelId !== channelId) {
  throw new WsException(FORBIDDEN);
@@ -228,15 +235,7 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    const isVisitor = !!client.data.visitorId;
-
-    if (!hasAccess || dto.channelId !== channelId) {
-      throw new WsException('FORBIDDEN');
-    }
-
-    if (isVisitor && dto.conversationId !== conversationId) {
-      throw new WsException('FORBIDDEN: Conversation mismatch');
-    }
+    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
     }
 
@@ -322,15 +321,7 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    const isVisitor = !!client.data.visitorId;
-
-    if (!hasAccess || dto.channelId !== channelId) {
-      throw new WsException('FORBIDDEN');
-    }
-
-    if (isVisitor && dto.conversationId !== conversationId) {
-      throw new WsException('FORBIDDEN: Conversation mismatch');
-    }
+    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
     }
 
@@ -363,15 +354,7 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    const isVisitor = !!client.data.visitorId;
-
-    if (!hasAccess || dto.channelId !== channelId) {
-      throw new WsException('FORBIDDEN');
-    }
-
-    if (isVisitor && dto.conversationId !== conversationId) {
-      throw new WsException('FORBIDDEN: Conversation mismatch');
-    }
+    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
     }
 
@@ -408,15 +391,7 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    const isVisitor = !!client.data.visitorId;
-
-    if (!hasAccess || dto.channelId !== channelId) {
-      throw new WsException('FORBIDDEN');
-    }
-
-    if (isVisitor && dto.conversationId !== conversationId) {
-      throw new WsException('FORBIDDEN: Conversation mismatch');
-    }
+    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
     }
 
