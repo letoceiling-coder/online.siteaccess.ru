@@ -38,7 +38,7 @@ class CallStateMachine {
       return false;
     }
 
-    console.log([CALL_STATE_MACHINE] Transition:  в†’ , metadata);
+      console.log("[CALL_STATE_MACHINE] Transition:", this.currentState, "•", to, metadata);
 
     // Clear watchdog on any transition
     if (this.connectingWatchdog) {
