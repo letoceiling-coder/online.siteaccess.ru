@@ -312,8 +312,14 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
     }
 
     const payload = {
@@ -345,8 +351,14 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
     }
 
     await this.callsService.updateCallStatus(dto.callId, 'ended', dto.reason || 'hangup');
@@ -382,8 +394,14 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
     }
 
     await this.callsService.updateCallStatus(dto.callId, 'busy', 'busy');
