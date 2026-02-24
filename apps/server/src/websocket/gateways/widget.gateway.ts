@@ -347,6 +347,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return ackPayload;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.error([TRACE] [WIDGET] call:relay-detected error: callId=, error=);
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(`[TRACE] [WIDGET] message:send error: clientMessageId=${clientMsgIdPrefix}..., error=${errorMessage}${errorStack ? `, stack=${errorStack.substring(0, 400)}` : ''}`);
       return { ok: false, error: errorMessage };
@@ -512,7 +513,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { ok: true, callId: dto.callId };
       this.logger.log([TRACE] [WIDGET] call:relay-detected success: callId=);
       const errorMessage = error instanceof Error ? error.message : 'unknown';
-      this.logger.error([TRACE] [WIDGET] call:relay-detected error: callId=, error=);
       return { ok: false, error: errorMessage };
     }
   }
