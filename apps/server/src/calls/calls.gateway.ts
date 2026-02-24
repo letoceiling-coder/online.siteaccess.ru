@@ -372,8 +372,8 @@ export class CallsGateway {
       timestamp: dto.timestamp || new Date().toISOString(),
     };
 
-    this.forwardCallEvent('/widget', 'call:hangup', payload, conversationId, undefined, server);
-    this.forwardCallEvent('/operator', 'call:hangup', payload, conversationId, undefined, server);
+    this.forwardCallEvent('/widget', 'call:hangup', payload, dto.conversationId, undefined, server);
+    this.forwardCallEvent('/operator', 'call:hangup', payload, dto.conversationId, undefined, server);
 
     this.logger.log(`Call hangup: callId=${dto.callId}, reason=${dto.reason || 'hangup'}`);
   }
