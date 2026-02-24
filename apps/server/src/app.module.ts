@@ -35,6 +35,7 @@ import { TurnModule } from './turn/turn.module';
     OperatorModule,
     CallsModule,
     SmokeModule,
+    TurnModule,
   ],
   providers: [
     {
