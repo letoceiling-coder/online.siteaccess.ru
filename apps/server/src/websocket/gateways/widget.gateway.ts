@@ -461,6 +461,8 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('call:answer')
+  @UseGuards(WidgetAuthGuard)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleCallAnswer(client: Socket, payload: CallAnswerDto) {
     this.logger.log(`[TRACE] [WIDGET] call:answer received: callId=${payload?.callId}`);
     try {
