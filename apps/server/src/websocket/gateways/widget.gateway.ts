@@ -511,7 +511,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.callsGateway.handleRelayDetected(dto, client, '/widget', this.server);
       this.logger.log([TRACE] [WIDGET] call:relay-detected success: callId=);
       return { ok: true, callId: dto.callId };
-    } catch (error) {
+      this.logger.log([TRACE] [WIDGET] call:relay-detected success: callId=);
       const errorMessage = error instanceof Error ? error.message : 'unknown';
       this.logger.error([TRACE] [WIDGET] call:relay-detected error: callId=, error=);
       return { ok: false, error: errorMessage };
