@@ -207,6 +207,7 @@ export class CallsGateway {
     client: Socket,
     namespace: '/widget' | '/operator',
     server: Server,
+  ) {
     const channelId = client.data.channelId;
     const conversationId = client.data.conversationId;
 
@@ -219,8 +220,14 @@ export class CallsGateway {
       client.data.visitorId,
     );
 
-    if (!hasAccess || dto.conversationId !== conversationId || dto.channelId !== channelId) {
+    const isVisitor = !!client.data.visitorId;
+
+    if (!hasAccess || dto.channelId !== channelId) {
       throw new WsException('FORBIDDEN');
+    }
+
+    if (isVisitor && dto.conversationId !== conversationId) {
+      throw new WsException('FORBIDDEN: Conversation mismatch');
     }
 
     await this.callsService.updateCallStatus(dto.callId, 'in_call');
