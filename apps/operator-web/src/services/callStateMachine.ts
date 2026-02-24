@@ -34,7 +34,7 @@ class CallStateMachine {
 
   transition(to: CallState, metadata?: { conversationId?: string; callId?: string; kind?: 'audio' | 'video'; fromRole?: 'operator' | 'visitor'; incomingCall?: { callId: string; fromRole: string; kind: string } }): boolean {
     if (!this.canTransition(to)) {
-      console.warn([CALL_STATE_MACHINE] Illegal transition:  в†’ );
+        console.warn("[CALL_STATE_MACHINE] Illegal transition:", this.currentState, "•", to);
       return false;
     }
 
