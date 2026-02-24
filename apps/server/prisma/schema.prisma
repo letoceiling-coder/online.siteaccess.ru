@@ -150,6 +150,10 @@ model CallRecord {
   startedAt     DateTime?
   endedAt       DateTime?
   endedReason   String?
+  connectedAt     DateTime?
+  usedRelay       Boolean  @default(false)
+  connectionTimeMs Int?
+  durationMs      Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

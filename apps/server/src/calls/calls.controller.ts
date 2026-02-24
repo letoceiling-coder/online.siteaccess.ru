@@ -47,3 +47,12 @@ export class CallsController {
     return { iceServers };
   }
 }
+
+  @Get('metrics')
+  @UseGuards(AuthGuard(['jwt', 'operator-jwt']))
+  async getCallMetrics(@Req() req: any) {
+    const channelId = req.user?.channelId || req.query?.channelId;
+    const metrics = await this.callsService.getCallMetrics(channelId);
+    return metrics;
+  }
+}
