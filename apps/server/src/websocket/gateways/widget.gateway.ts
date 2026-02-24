@@ -500,23 +500,23 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('call:hangup')
+
   @SubscribeMessage('call:relay-detected')
   @UseGuards(WidgetAuthGuard)
   @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleRelayDetected(client: Socket, payload: any) {
     this.logger.log([TRACE] [WIDGET] call:relay-detected received: callId=);
     try {
-    this.logger.log([TRACE] [WIDGET] call:relay-detected received: callId=);
+      const dto = payload as CallRelayDetectedDto;
       await this.callsGateway.handleRelayDetected(dto, client, '/widget', this.server);
       this.logger.log([TRACE] [WIDGET] call:relay-detected success: callId=);
       return { ok: true, callId: dto.callId };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'unknown';
-      this.logger.log([TRACE] [WIDGET] call:relay-detected success: callId=);
+      this.logger.error([TRACE] [WIDGET] call:relay-detected error: callId=, error=);
       return { ok: false, error: errorMessage };
     }
   }
-      this.logger.error([TRACE] [WIDGET] call:relay-detected error: callId=, error=);
 
 
   @SubscribeMessage('call:busy')
