@@ -207,7 +207,6 @@ export class CallsGateway {
     client: Socket,
     namespace: '/widget' | '/operator',
     server: Server,
-  ) {
     const channelId = client.data.channelId;
     const conversationId = client.data.conversationId;
 
