@@ -469,6 +469,7 @@ function App() {
             ...prev,
             [data.conversationId]: mergedMessages,
           };
+        });
 
       setSocket(ws);
     } catch (err: any) {
