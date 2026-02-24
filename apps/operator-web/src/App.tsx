@@ -664,11 +664,6 @@ function App() {
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
-    // Clear existing timer if any
-    const existingTimer = retryTimersRef.current.get(message.clientMessageId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
     retryTimersRef.current.set(message.clientMessageId, timer);
   }, [selectedConversation, sendMessageToServer]);
 
