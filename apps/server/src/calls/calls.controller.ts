@@ -38,7 +38,7 @@ export class CallsController {
     }
 
     const userId = req.user?.id || req.user?.userId || 'unknown';
-    this.logger.log(" ICE servers requested by user \ + userId + " returning \ + iceServers.length + " servers\);
+    this.logger.log(" ICE servers requested by user  + userId + " returning  + iceServers.length + " servers);
 
     return { iceServers };
   }
