@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { callStore } from './stores/callStore';
+import { callStateMachine } from './services/callStateMachine';
 import { io, Socket } from 'socket.io-client';
 import './App.css';
 
@@ -70,17 +72,14 @@ function App() {
   const retryDelays = [3000, 6000, 12000, 24000, 48000]; // Exponential backoff in ms
   
   // Call state
-  const [callState, setCallState] = useState<{
-    callId: string | null;
-    status: 'idle' | 'calling' | 'ringing' | 'in_call' | 'ended';
-    kind: 'audio' | 'video' | null;
-    incomingCall: { callId: string; fromRole: string; kind: string } | null;
-  }>({
-    callId: null,
-    status: 'idle',
-    kind: null,
-    incomingCall: null,
-  });
+  // Call state from store
+  const [callStoreState, setCallStoreState] = React.useState(callStore.getState());
+  
+  useEffect(() => {
+    const unsubscribe = callStore.subscribe(setCallStoreState);
+    return unsubscribe;
+  }, []);
+  
 
   // Initialize audio element
   useEffect(() => {
