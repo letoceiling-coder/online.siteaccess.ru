@@ -55,6 +55,16 @@ function App() {
   );
   const pendingMessagesRef = useRef<Map<string, Message>>(new Map()); // clientMessageId -> message
   const retryTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map()); // clientMessageId -> timer
+  
+  // Clear retry timer function
+  const clearRetryTimer = useCallback((clientMessageId: string) => {
+    const timer = retryTimersRef.current.get(clientMessageId);
+    if (timer) {
+      clearTimeout(timer);
+      retryTimersRef.current.delete(clientMessageId);
+    }
+  }, []);
+
   const lastSeenCreatedAtRef = useRef<string | null>(null); // For sync after reconnect
   const maxRetries = 5;
   const retryDelays = [3000, 6000, 12000, 24000, 48000]; // Exponential backoff in ms
@@ -263,8 +273,8 @@ function App() {
         // Resend pending messages on reconnect
         resendPendingMessages();
         // Request sync for active conversation
-        if (selectedConversationRef.current) {
-          requestSync(selectedConversationRef.current);
+        if (selectedConversation) {
+          requestSync(selectedConversation);
         }
         
         // On reconnect, if a conversation is selected, refresh its messages
@@ -649,6 +659,11 @@ function App() {
       }
     }, delay);
 
+    // Clear existing timer if any
+    const existingTimer = retryTimersRef.current.get(message.clientMessageId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
     retryTimersRef.current.set(message.clientMessageId, timer);
   }, [selectedConversation, sendMessageToServer]);
 
