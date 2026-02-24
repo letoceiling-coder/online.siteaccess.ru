@@ -425,53 +425,39 @@ function App() {
       });
 
       // Call event handlers
-      ws.on('call:ring', (data: any) => {
-        if (data.conversationId === selectedConversation) {
-          callStateMachine.transition('ringing', { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
-        }
-
-      ws.on('call:offer', (data: any) => {
-        if (data.conversationId === selectedConversation && data.fromRole === 'visitor') {
-          callStateMachine.transition('ringing', { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: 'visitor', incomingCall: { callId: data.callId, fromRole: 'visitor', kind: data.kind } });
-        }
-      });
-      });
-
-      ws.on('call:hangup', (data: any) => {
-        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
-          setCallState({ callId: null, status: 'idle', kind: null, incomingCall: null });
+      ws.on('call:ring', (payload: any) => {
+        if (payload.conversationId === selectedConversation) {
+          callStateMachine.transition('ringing', { conversationId: payload.conversationId, incomingCall: { callId: payload.callId, fromRole: payload.fromRole, kind: payload.kind } });
         }
       });
 
-      ws.on('call:busy', (data: any) => {
-        if (data.callId === callStoreState.callId) {
-      ws.on('call:hangup', (data: any) => {
-        if (data.callId === callStoreState.callId || data.callId === callStoreState.incomingCall?.callId) {
-        }
-      });
-        console.log(`Sync response for ${data.conversationId}: ${data.messages?.length || 0} messages`);
-      ws.on('call:busy', (data: any) => {
-        if (data.callId === callStoreState.callId) {
+      ws.on('call:offer', (payload: any) => {
+        if (payload.conversationId === selectedConversation && payload.fromRole === 'visitor') {
+          callStateMachine.transition('ringing', { conversationId: payload.conversationId, callId: payload.callId, kind: payload.kind, fromRole: 'visitor', incomingCall: { callId: payload.callId, fromRole: 'visitor', kind: payload.kind } });
         }
       });
 
-          
-          // Update lastSeenCreatedAt from the latest message in sync response
-          if (mergedMessages.length > 0) {
-            const latestSyncMsg = mergedMessages[mergedMessages.length - 1];
-            if (latestSyncMsg.createdAt && (!lastSeenCreatedAtRef.current || latestSyncMsg.createdAt > lastSeenCreatedAtRef.current)) {
-              lastSeenCreatedAtRef.current = latestSyncMsg.createdAt;
-              saveLastSeenCreatedAt(latestSyncMsg.createdAt);
-            }
-          }
-
-          return {
-            ...prev,
-            [data.conversationId]: mergedMessages,
-          };
-        });
+      ws.on('call:answer', (payload: any) => {
+        if (payload.callId === callStoreState.callId) {
+          callStateMachine.transition('accepted');
+          setTimeout(() => callStateMachine.transition('connecting'), 100);
+          setTimeout(() => callStateMachine.transition('in_call'), 500);
+        }
       });
 
+      ws.on('call:hangup', (payload: any) => {
+        if (payload.callId === callStoreState.callId || payload.callId === callStoreState.incomingCall?.callId) {
+          callStateMachine.transition('ended');
+        }
+      });
+
+      ws.on('call:busy', (payload: any) => {
+        if (payload.callId === callStoreState.callId) {
+          callStateMachine.transition('busy');
+        }
+      });
+
+      
       setSocket(ws);
     } catch (err: any) {
       setError(err.message || 'Connection failed');
