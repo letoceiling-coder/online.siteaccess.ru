@@ -427,12 +427,14 @@ function App() {
       // Call event handlers
       ws.on(" call:ring, (data: any) => {
  if (data.conversationId === selectedConversation) {
- callStateMachine.transition(inging, { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
+ callStateMachine.transition(
+inging, { conversationId: selectedConversation, incomingCall: { callId: data.callId, fromRole: data.fromRole, kind: data.kind } });
  }
  });
       ws.on(" call:offer, (data: any) => {
  if (data.conversationId === selectedConversation && data.fromRole === isitor) {
- callStateMachine.transition(inging, { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: isitor, incomingCall: { callId: data.callId, fromRole: isitor, kind: data.kind } });
+ callStateMachine.transition(
+inging, { conversationId: selectedConversation, callId: data.callId, kind: data.kind, fromRole: isitor, incomingCall: { callId: data.callId, fromRole: isitor, kind: data.kind } });
  }
  });
         }
