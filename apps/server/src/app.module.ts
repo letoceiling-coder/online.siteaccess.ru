@@ -13,7 +13,6 @@ import { OperatorModule } from './operator/operator.module';
 import { CallsModule } from './calls/calls.module';
 import { SmokeModule } from './smoke/smoke.module';
 import { TurnModule } from './turn/turn.module';
-    TurnModule,
 
 @Module({
   imports: [
@@ -36,7 +35,6 @@ import { TurnModule } from './turn/turn.module';
     OperatorModule,
     CallsModule,
     SmokeModule,
-    TurnModule,
   ],
   providers: [
     {
