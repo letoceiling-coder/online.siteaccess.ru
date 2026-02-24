@@ -455,16 +455,16 @@ export class OperatorGateway implements OnGatewayConnection, OnGatewayDisconnect
   @UsePipes(new ValidationPipe({ transform: true, whitelist: false, forbidNonWhitelisted: false }))
   async handleRelayDetected(client: Socket, payload: any) {
     this.logger.log([TRACE] [OP] call:relay-detected received: callId=);
-    try {
+    this.logger.log([TRACE] [OP] call:relay-detected received: callId=);
       const dto = payload as CallRelayDetectedDto;
       await this.callsGateway.handleRelayDetected(dto, client, '/operator', this.server);
       this.logger.log([TRACE] [OP] call:relay-detected success: callId=);
       return { ok: true, callId: dto.callId };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'unknown';
+      this.logger.log([TRACE] [OP] call:relay-detected success: callId=);
       this.logger.error([TRACE] [OP] call:relay-detected error: callId=, error=);
       return { ok: false, error: errorMessage };
     }
-  }
+      this.logger.error([TRACE] [OP] call:relay-detected error: callId=, error=);
 
 
