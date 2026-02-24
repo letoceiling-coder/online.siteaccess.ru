@@ -43,9 +43,7 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleConnection(client: Socket) {
     // Guard applies to messages, not connection - need to auth here
     const token = client.handshake.auth?.token || client.handshake.query?.token;
-    
     this.logger.log(`[TRACE] handleConnection: clientId=${client.id}, hasToken=${!!token}, authKeys=[${Object.keys(client.handshake.auth || {}).join(',')}], queryKeys=[${Object.keys(client.handshake.query || {}).join(',')}]`);
-    
     if (!token || typeof token !== 'string') {
       this.logger.warn(`Widget connection rejected: no token, clientId=${client.id}`);
       client.disconnect();
@@ -56,20 +54,16 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify(token, {
         secret: this.config.get('JWT_SECRET') || 'dev-secret',
       });
-      
       this.logger.log(`[TRACE] Token verified: channelId=${payload.channelId}, conversationId=${payload.conversationId}`);
-      
       // Domain lock: validate origin against allowedDomains
       // Extract origin from multiple sources
       const originHeader = client.handshake.headers.origin;
       const refererHeader = client.handshake.headers.referer;
       const hostHeader = client.handshake.headers.host;
       const xForwardedHost = client.handshake.headers['x-forwarded-host'];
-      
       // Normalize origin hostname
       let originHost: string | null = null;
       let originUrl: string | null = null;
-      
       if (originHeader) {
         try {
           originUrl = originHeader;
@@ -100,23 +94,18 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
         }
       }
-      
       const channel = await this.prisma.channel.findUnique({
         where: { id: payload.channelId },
         select: { id: true, allowedDomains: true },
       });
-      
       if (channel) {
         const allowedDomains = channel.allowedDomains as string[] | null;
         const channelIdPrefix = channel.id.substring(0, 8);
-        
         if (allowedDomains && allowedDomains.length > 0) {
           // Normalize allowed domains (lowercase, no port)
           const normalizedAllowed = allowedDomains.map(d => d.toLowerCase().split(':')[0]);
-          
           let allowDecision = false;
           let denyReason = '';
-          
           if (!originHost) {
             // Missing origin: allow only in E2E test mode
             if (process.env.E2E_ALLOW_NO_ORIGIN === 'true') {
@@ -133,10 +122,8 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
             allowDecision = false;
             denyReason = 'origin_not_in_allowed';
           }
-          
           // Log decision with all context
           this.logger.log(`[DOMAIN_LOCK_WS] ${allowDecision ? 'allow' : 'deny'} channelId=${channelIdPrefix}... origin=${originHost || 'missing'} originUrl=${originUrl || 'missing'} referer=${refererHeader || 'missing'} allowed=[${normalizedAllowed.join(',')}] reason=${denyReason || 'allowed'}`);
-          
           if (!allowDecision) {
             this.logger.warn(`[DOMAIN_LOCK_WS] Connection rejected: ${denyReason}, channelId=${channelIdPrefix}...`);
             throw new WsException('DOMAIN_NOT_ALLOWED');
@@ -145,7 +132,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           this.logger.warn(`[DOMAIN_LOCK_WS] Channel ${channelIdPrefix}... has no allowedDomains - allowing all origins (dev mode)`);
         }
       }
-      
       client.data.channelId = payload.channelId;
       client.data.visitorId = payload.visitorId;
       client.data.conversationId = payload.conversationId;
@@ -154,7 +140,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Widget sockets join ONLY conversation room (not channel room)
       // This prevents duplicate message:new delivery when operator emits to both rooms
       client.join(`conversation:${payload.conversationId}`);
-      
       // Log rooms for debugging
       const debugWs = process.env.DEBUG_WS === '1';
       if (debugWs) {
@@ -163,17 +148,14 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       this.logger.log(`[WS_TRACE] [WIDGET] Connection success: socketId=${client.id}, channelId=${payload.channelId?.substring(0, 8)}..., conversationId=${payload.conversationId?.substring(0, 8)}...`);
-      
       // Log rooms on connect
       const rooms = Array.from(client.rooms);
       this.logger.log(`[ROOMS_ON_CONNECT] ns=widget socketId=${client.id} rooms=[${rooms.join(', ')}]`);
-      
       // Add packet logging middleware for widget socket
       client.use((packet, next) => {
         this.logger.log(`[WIDGET_PACKET] socketId=${client.id} event=${packet[0]} namespace=${client.nsp.name}`);
         next();
       });
-      
       // [WS_TRACE] Add disconnect/error listeners for engine.io level diagnostics
       if (client.conn) {
         client.conn.on('close', (reason: string) => {
@@ -212,7 +194,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleMessage(client: Socket, payload: { conversationId: string; text: string; clientMessageId: string }) {
     const { conversationId: socketConvId, visitorId, channelId } = client.data;
     const { conversationId, text, clientMessageId } = payload;
-    
     // [TRACE] Log incoming message
     const clientMsgIdPrefix = clientMessageId ? clientMessageId.substring(0, 16) : 'missing';
     this.logger.log(`[TRACE] [WIDGET] message:send received: socketId=${client.id}, conversationId=${conversationId?.substring(0, 8)}..., clientMessageId=${clientMsgIdPrefix}..., textLength=${text?.length || 0}`);
@@ -266,7 +247,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Создание сообщения (using Prisma)
       const trimmedText = text.trim();
-      
       this.logger.log(`[TRACE] [WIDGET] Creating message in DB: clientMessageId=${clientMsgIdPrefix}...`);
       const message = await this.prisma.message.create({
         data: {
@@ -280,7 +260,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
         },
       });
       this.logger.log(`[TRACE] [WIDGET] Message saved: messageId=${message.id}, clientMessageId=${clientMsgIdPrefix}..., conversationId=${conversationId?.substring(0, 8)}..., senderType=visitor`);
-      
       // Update conversation updatedAt
       try {
         await this.prisma.conversation.update({
@@ -316,7 +295,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Emit to widget namespace (other widgets in same conversation)
       // Widgets only join conversation room, so emit only to conversation room
       this.server.to(`conversation:${conversationId}`).except(client.id).emit('message:new', messagePayload);
-      
       const debugWs = process.env.DEBUG_WS === '1';
       if (debugWs) {
         this.logger.log(`[MSG_EMIT] ns=widget to=conversation:${conversationId} conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
@@ -335,7 +313,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
           // Also emit to conversation room (for operators who have explicitly joined the conversation)
           // Operators in both rooms will receive twice, but client must dedupe by serverMessageId
           operatorNamespace.to(`conversation:${conversationId}`).emit('message:new', messagePayload);
-          
           if (debugWs) {
             this.logger.log(`[MSG_EMIT] ns=operator to=channel:${channelId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
             this.logger.log(`[MSG_EMIT] ns=operator to=conversation:${conversationId.substring(0, 8)}... conv=${conversationId.substring(0, 8)}... serverMessageId=${message.id} clientMessageId=${clientMsgIdPrefix}...`);
@@ -410,7 +387,6 @@ export class WidgetGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handlePresence(client: Socket) {
     const { channelId, visitorId } = client.data;
     const key = `presence:channel:${channelId}:visitor:${visitorId}`;
-    
     // Установить в Redis на 30 секунд
     await this.redis.setex(key, 30, '1');
 
