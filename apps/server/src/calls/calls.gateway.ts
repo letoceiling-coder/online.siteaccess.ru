@@ -192,22 +192,30 @@ export class CallsGateway {
     }
     
     if (operatorNamespace) {
-      const conversationRoom = `conversation:${dto.conversationId}`;
-      operatorNamespace.to(conversationRoom).except(client.id).emit('call:offer', offerPayload);
-      this.logger.log(`[CALL_TRACE] Forwarded call:offer to operator namespace room ${conversationRoom}`);
-    } else {
-      this.logger.error(`[CALL_TRACE] Cannot get operator namespace for call:offer`);
-    }
+    const channelId = client.data.channelId;
+    const conversationId = client.data.conversationId;
 
-    this.logger.log(`[CALL_TRACE] Call offer forwarded: callId=${dto.callId}, conversationId=${dto.conversationId}, fromRole=${fromRole}`);
-  }
+    const isVisitor = !!client.data.visitorId;
+    const debugCalls = process.env.DEBUG_CALLS === " 1;
+ 
+ if (debugCalls) {
+ this.logger.log([CALL_ENTRY] event=call:answer ns= socketId= isVisitor= dto=);
+ }
 
-  async handleCallAnswer(
-    dto: CallAnswerDto,
-    client: Socket,
-    namespace: '/widget' | '/operator',
-    server: Server,
-  ) {
+ const hasAccess = await this.callsService.verifyConversationAccess(
+ dto.conversationId,
+ dto.channelId,
+ client.data.userId,
+ client.data.visitorId,
+ );
+
+ if (!hasAccess || dto.channelId !== channelId) {
+ throw new WsException(FORBIDDEN);
+ }
+
+ if (isVisitor && dto.conversationId !== conversationId) {
+ throw new WsException(FORBIDDEN: Conversation mismatch);
+ }
     const channelId = client.data.channelId;
     const conversationId = client.data.conversationId;
 
